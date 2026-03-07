@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Tower Defense Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+        body { font-family: 'Pretendard', sans-serif; background-color: #0f172a; margin: 0; overflow: hidden; color: white; user-select: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas { box-shadow: 0 0 50px rgba(0,0,0,0.5); cursor: crosshair; }
+        .ui-panel { position: absolute; pointer-events: none; }
+        .interactable { pointer-events: auto; }
+        .glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .tower-slot { transition: all 0.2s; cursor: pointer; border-radius: 12px; padding: 8px; width: 80px; text-align: center; }
+        .tower-slot:hover:not(.disabled) { transform: translateY(-5px); background: rgba(59, 130, 246, 0.3); }
+        .tower-slot.active { background: rgba(59, 130, 246, 0.6); border: 2px solid #3b82f6; }
+        #upgrade-menu { display: none; position: absolute; transform: translate(-50%, -120%); z-index: 100; }
+        #main-menu, #map-selection { position: fixed; inset: 0; z-index: 1000; background: radial-gradient(circle at center, #1e293b, #0f172a); display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #map-selection { display: none; }
+        .map-card { width: 200px; cursor: pointer; transition: 0.3s; border: 2px solid transparent; }
+        .map-card:hover { transform: translateY(-10px); border-color: #3b82f6; }
+        #message-box { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 2000; font-size: 2rem; font-weight: 800; text-shadow: 0 0 10px black; opacity: 0; transition: opacity 0.5s; }
+    </style>
+</head>
+<body>
+
+<div id="main-menu">
+    <h1 class="text-6xl font-black mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">TDS: EVOLUTION</h1>
+    <button class="bg-blue-600 px-12 py-4 rounded-2xl font-black text-2xl hover:bg-blue-500 mb-4" onclick="showMapSelection()">GAME START</button>
+</div>
+
+<div id="map-selection">
+    <h2 class="text-4xl font-black mb-12">SELECT STAGE</h2>
+    <div class="flex gap-6">
+        <div class="map-card glass p-6 rounded-3xl" onclick="selectMap(0)">🌿 초원</div>
+        <div class="map-card glass p-6 rounded-3xl" onclick="selectMap(1)">⏳ 사막</div>
+        <div class="map-card glass p-6 rounded-3xl" onclick="selectMap(2)">❄️ 얼음</div>
+        <div class="map-card glass p-6 rounded-3xl" onclick="selectMap(3)">🌋 화산</div>
+    </div>
+</div>
+
+<div id="message-box"></div>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div class="ui-panel top-0 left-0 w-full p-6 flex justify-between items-start">
+        <div class="glass p-4 rounded-2xl flex gap-6">
+            <div class="flex flex-col"><span class="text-xs text-slate-400">GOLD</span><span id="gold-display" class="text-2xl font-black text-yellow-400">1000</span></div>
+            <div class="flex flex-col border-l border-white/10 pl-6"><span class="text-xs text-slate-400">LIFE</span><span id="health-display" class="text-2xl font-black text-red-500">100</span></div>
+            <div class="flex flex-col border-l border-white/10 pl-6"><span class="text-xs text-slate-400">WAVE</span><span id="wave-display" class="text-2xl font-black text-blue-400">1/100</span></div>
+        </div>
+        <button id="start-wave-btn" class="interactable glass px-8 py-4 rounded-2xl font-black text-xl hover:bg-blue-600">START WAVE</button>
+    </div>
+
+    <div id="upgrade-menu" class="interactable glass p-4 rounded-xl shadow-2xl w-48">
+        <h3 id="tower-name-ui" class="font-bold text-center mb-2"></h3>
+        <button id="upgrade-btn" class="w-full bg-green-600 py-2 rounded font-bold text-sm mb-2">Upgrade</button>
+        <button id="sell-btn" class="w-full bg-red-600 py-2 rounded font-bold text-sm">Sell</button>
+    </div>
+
+    <div class="ui-panel bottom-0 pb-6 flex gap-2 overflow-x-auto max-w-[90vw] justify-center">
+        <!-- Towers populated by JS -->
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const upgradeMenu = document.getElementById('upgrade-menu');
+    const msgBox = document.getElementById('message-box');
+
+    let width, height, gold = 1000, health = 100, wave = 0, isWaveActive = false, gameRunning = false, currentMapIndex = 0;
+    let selectedTowerType = null, activeTowerForUI = null;
+    const towers = [], enemies = [], projectiles = [], effects = [];
+
+    const towerTypes = {
+        slinger: { name: '투석병', cost: 50, range: 150, damage: 10, fireRate: 45, color: '#94a3b8', emoji: '🪨', type: 'single' },
+        spearman: { name: '투창병', cost: 150, range: 200, damage: 15, fireRate: 60, color: '#fcd34d', emoji: '🔱', type: 'pierce' },
+        rifleman: { name: '소총병', cost: 200, range: 180, damage: 5, fireRate: 15, color: '#4ade80', emoji: '🔫', type: 'single' },
+        firemage: { name: '불마법사', cost: 400, range: 160, damage: 30, fireRate: 80, color: '#f87171', emoji: '🔥', type: 'aoe', dot: 3, dotDuration: 3000, aoeRadius: 60 },
+        icemage: { name: '얼음법사', cost: 500, range: 160, damage: 15, fireRate: 70, color: '#60a5fa', emoji: '❄️', type: 'aoe', slow: 0.5, aoeRadius: 60 },
+        bomber: { name: '폭탄병', cost: 800, range: 200, damage: 100, fireRate: 100, color: '#fb923c', emoji: '💣', type: 'aoe', aoeRadius: 100 },
+        sniper: { name: '저격병', cost: 1000, range: 2000, damage: 250, fireRate: 200, color: '#a78bfa', emoji: '🎯', type: 'single' },
+        tank: { name: '탱크', cost: 2500, range: 400, damage: 300, fireRate: 150, color: '#475569', emoji: '🚜', type: 'aoe', aoeRadius: 100, dot: 10, dotDuration: 5000 }
+    };
+
+    const mapData = [
+        { bg: '#1e293b', path: '#334155', getWaypoints: (w, h) => [{x: -50, y: h*0.5}, {x: w*0.2, y: h*0.5}, {x: w*0.2, y: h*0.2}, {x: w*0.8, y: h*0.2}, {x: w*0.8, y: h*0.8}, {x: w*0.2, y: h*0.8}, {x: w*0.2, y: h*0.5}, {x: w+50, y: h*0.5}] },
+        { bg: '#451a03', path: '#78350f', getWaypoints: (w, h) => [{x: w*0.5, y: -50}, {x: w*0.5, y: h*0.2}, {x: w*0.1, y: h*0.2}, {x: w*0.1, y: h*0.8}, {x: w*0.9, y: h*0.8}, {x: w*0.9, y: h*0.5}, {x: w+50, y: h*0.5}] },
+        { bg: '#0c4a6e', path: '#075985', getWaypoints: (w, h) => [{x: -50, y: h*0.1}, {x: w*0.9, y: h*0.1}, {x: w*0.1, y: h*0.9}, {x: w*0.9, y: h*0.9}, {x: w+50, y: h*0.5}] },
+        { bg: '#450a0a', path: '#7f1d1d', getWaypoints: (w, h) => [{x: -50, y: h*0.5}, {x: w*0.5, y: h*0.5}, {x: w*0.5, y: -50}, {x: w*0.5, y: h+50}, {x: w*0.5, y: h*0.5}, {x: w+50, y: h*0.5}] }
+    ];
+
+    let waypoints = [];
+
+    function showMessage(text, duration = 3000) {
+        msgBox.innerText = text;
+        msgBox.style.opacity = '1';
+        setTimeout(() => msgBox.style.opacity = '0', duration);
+    }
+
+    function initTowerUI() {
+        const container = document.querySelector('.bottom-0');
+        container.innerHTML = '';
+        Object.keys(towerTypes).forEach(key => {
+            const t = towerTypes[key];
+            const div = document.createElement('div');
+            div.className = 'tower-slot interactable glass flex flex-col items-center';
+            div.innerHTML = `<span class="text-2xl">${t.emoji}</span><span class="text-[10px] font-bold">${t.name}</span><span class="text-[10px] text-yellow-400">$${t.cost}</span>`;
+            div.onclick = () => {
+                document.querySelectorAll('.tower-slot').forEach(s => s.classList.remove('active'));
+                div.classList.add('active');
+                selectedTowerType = key;
+            };
+            container.appendChild(div);
+        });
+    }
+
+    function showMapSelection() {
+        document.getElementById('main-menu').style.display = 'none';
+        document.getElementById('map-selection').style.display = 'flex';
+    }
+
+    function selectMap(index) {
+        currentMapIndex = index;
+        document.getElementById('map-selection').style.display = 'none';
+        gameRunning = true;
+        resize();
+        initTowerUI();
+    }
+
+    function resize() {
+        width = window.innerWidth; height = window.innerHeight;
+        canvas.width = width; canvas.height = height;
+        if (gameRunning) waypoints = mapData[currentMapIndex].getWaypoints(width, height);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Enemy {
+        constructor(config) {
+            this.id = Math.random();
+            this.type = config.type;
+            this.x = config.x || waypoints[0].x;
+            this.y = config.y || waypoints[0].y;
+            this.waypointIndex = config.startIdx || 0;
+            this.radius = config.radius || 15;
+            this.maxHealth = config.health;
+            this.health = this.maxHealth;
+            this.speed = config.speed;
+            this.originalSpeed = config.speed;
+            this.color = config.color || '#ef4444';
+            this.reward = config.reward || 10;
+            this.isSanta = config.isSanta || false;
+            this.isBerserker = config.isBerserker || false;
+            this.isStoneGolem = config.isStoneGolem || false;
+            this.isGhost = config.isGhost || false; // 스켈레톤용 부활 대기
+            
+            this.debuffs = { slow: 0, dot: 0, dotVal: 0, freeze: 0 };
+            this.timers = { spawnSkeleton: 0, berserkerTalk: 0, golemSpawn: 0 };
+            
+            if (this.isSanta) {
+                this.targetX = waypoints[waypoints.length-1].x;
+                this.targetY = waypoints[waypoints.length-1].y;
+            }
+        }
+
+        draw() {
+            if (this.isGhost) return;
+            ctx.fillStyle = '#111';
+            ctx.fillRect(this.x - 20, this.y - 25, 40, 4);
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - 20, this.y - 25, (this.health/this.maxHealth)*40, 4);
+
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            if (this.type === '얼음골렘') {
+                ctx.strokeStyle = '#60a5fa';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 100, 0, Math.PI*2);
+                ctx.stroke();
+            }
+        }
+
+        update() {
+            if (this.isGhost) return;
+
+            // 디버프 처리
+            if (this.debuffs.freeze > 0) {
+                this.debuffs.freeze--;
+                return;
+            }
+            let currentSpeed = this.originalSpeed;
+            if (this.debuffs.slow > 0) {
+                currentSpeed *= 0.5;
+                this.debuffs.slow--;
+            }
+            if (this.debuffs.dot > 0) {
+                if (this.debuffs.dot % 30 === 0) this.takeDamage(this.debuffs.dotVal, 'dot');
+                this.debuffs.dot--;
+            }
+
+            // 산타 특수 이동
+            if (this.isSanta) {
+                const dx = this.targetX - this.x, dy = this.targetY - this.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 5) { health -= 1; this.health = 0; }
+                else { this.x += (dx/dist)*currentSpeed; this.y += (dy/dist)*currentSpeed; }
+                return;
+            }
+
+            // 일반 이동
+            const target = waypoints[this.waypointIndex + 1];
+            if (!target) return;
+            const dx = target.x - this.x, dy = target.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 5) {
+                this.waypointIndex++;
+                if (this.waypointIndex >= waypoints.length - 1) {
+                    if (this.isBerserker) health = 0;
+                    else health -= 10;
+                    this.health = 0;
+                }
+            } else {
+                this.x += (dx/dist)*currentSpeed;
+                this.y += (dy/dist)*currentSpeed;
+            }
+
+            // 특수 능력
+            if (this.type === '흑마법사') {
+                this.timers.spawnSkeleton++;
+                if (this.timers.spawnSkeleton > 300) { // 5초
+                    spawnEnemy('스켈레톤', this.x, this.y, this.waypointIndex);
+                    spawnEnemy('스켈레톤', this.x + 10, this.y + 10, this.waypointIndex);
+                    this.timers.spawnSkeleton = 0;
+                }
+            }
+            if (this.isBerserker) {
+                this.timers.berserkerTalk++;
+                if (this.timers.berserkerTalk > 600) {
+                    const messages = ["포기해라..", "끝이다..", "무의미한 저항이다.", "하하하!"];
+                    showMessage(messages[Math.floor(Math.random()*messages.length)], 2000);
+                    this.timers.berserkerTalk = 0;
+                }
+            }
+            if (this.isStoneGolem) {
+                // 일정량 데미지 입을 때마다 소환 로직은 takeDamage에서 처리
+            }
+        }
+
+        takeDamage(dmg, towerType) {
+            if (this.isGhost) return;
+            let finalDmg = dmg;
+            if (this.isSanta) finalDmg = 1;
+            
+            // 상성
+            if (this.type === '나무골렘' && ['firemage', 'bomber', 'tank'].includes(towerType)) finalDmg *= 2;
+            if (this.type === '화염골렘') {
+                if (towerType === 'firemage') finalDmg *= 0.5;
+                if (towerType === 'icemage') {
+                    this.debuffs.freeze = 300; // 5초 멈춤
+                }
+            }
+
+            const oldHealth = this.health;
+            this.health -= finalDmg;
+
+            // 대왕 돌 골렘 분열 소환
+            if (this.type === '초대형 돌 골렘') {
+                const threshold = 5000;
+                if (Math.floor(oldHealth/threshold) > Math.floor(this.health/threshold)) {
+                    const types = ['나무골렘', '화염골렘', '얼음골렘'];
+                    spawnEnemy(types[Math.floor(Math.random()*3)], this.x, this.y, this.waypointIndex);
+                }
+            }
+
+            if (this.health <= 0) this.onDeath();
+        }
+
+        onDeath() {
+            if (this.type === '스켈레톤' && !this.hasRevived) {
+                this.isGhost = true;
+                setTimeout(() => {
+                    this.health = this.maxHealth;
+                    this.isGhost = false;
+                    this.hasRevived = true;
+                }, 5000);
+            } else if (this.type === '초대형 돌 골렘') {
+                spawnEnemy('대형 돌 골렘', this.x - 20, this.y, this.waypointIndex);
+                spawnEnemy('대형 돌 골렘', this.x + 20, this.y, this.waypointIndex);
+            } else if (this.type === '대형 돌 골렘') {
+                spawnEnemy('돌 골렘', this.x - 15, this.y, this.waypointIndex);
+                spawnEnemy('돌 골렘', this.x + 15, this.y, this.waypointIndex);
+            } else if (this.type === '돌 골렘') {
+                spawnEnemy('미니 돌 골렘', this.x - 10, this.y, this.waypointIndex);
+                spawnEnemy('미니 돌 골렘', this.x + 10, this.y, this.waypointIndex);
+            }
+        }
+    }
+
+    function spawnEnemy(typeName, x = null, y = null, startIdx = 0) {
+        let config = { type: typeName, x, y, startIdx };
+        const wIdx = Math.floor(wave/5);
+        
+        switch(typeName) {
+            case '고블린': config.health = 25 + Math.min(wIdx*5, 75); config.speed = 2.5; config.color = '#4ade80'; break;
+            case '오크': config.health = 60 + Math.min(wIdx*15, 240); config.speed = 1.5; config.color = '#166534'; break;
+            case '스켈레톤': config.health = 30 + Math.min(wIdx*5, 90); config.speed = 2.0; config.color = '#f1f5f9'; break;
+            case '나무골렘': config.health = 300 + Math.min(wIdx*30, 600); config.speed = 0.8; config.color = '#78350f'; break;
+            case '화염골렘': config.health = 300 + Math.min(wIdx*30, 600); config.speed = 0.8; config.color = '#b91c1c'; break;
+            case '얼음골렘': config.health = 250 + Math.min(wIdx*15, 500); config.speed = 0.8; config.color = '#3b82f6'; break;
+            case '흑마법사': config.health = 150 + Math.min(wIdx*10, 200); config.speed = 1.2; config.color = '#7e22ce'; break;
+            case '산타클로스': config.health = 10 + Math.floor(wave/10)*10; config.speed = 1.0; config.color = '#ef4444'; config.isSanta = true; config.radius = 20; break;
+            case '버서커': config.health = 50000; config.speed = 0.5; config.color = '#000'; config.isBerserker = true; config.radius = 40; break;
+            case '초대형 돌 골렘': config.health = 200000; config.speed = 0.3; config.color = '#475569'; config.isStoneGolem = true; config.radius = 60; break;
+            case '대형 돌 골렘': config.health = 50000; config.speed = 0.5; config.color = '#64748b'; config.radius = 40; break;
+            case '돌 골렘': config.health = 10000; config.speed = 0.8; config.color = '#94a3b8'; config.radius = 25; break;
+            case '미니 돌 골렘': config.health = 1000; config.speed = 1.5; config.color = '#cbd5e1'; config.radius = 15; break;
+        }
+        enemies.push(new Enemy(config));
+    }
+
+    class Tower {
+        constructor(x, y, typeKey) {
+            this.x = x; this.y = y; this.typeKey = typeKey;
+            this.level = 1; this.stats = {...towerTypes[typeKey]};
+            this.timer = 0;
+        }
+        draw() {
+            if (activeTowerForUI === this || selectedTowerType) {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.stats.range, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.1)'; ctx.fill();
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)'; ctx.stroke();
+            }
+            ctx.fillStyle = this.stats.color; ctx.beginPath(); ctx.roundRect(this.x-20, this.y-20, 40, 40, 8); ctx.fill();
+            ctx.fillStyle = 'white'; ctx.font = '20px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(this.stats.emoji, this.x, this.y+7);
+        }
+        update() {
+            // 얼음골렘 디버프 확인
+            let speedFactor = 1;
+            for(let e of enemies) {
+                if (e.type === '얼음골렘' && Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2) < 100) {
+                    speedFactor = 0.5; break;
+                }
+            }
+
+            this.timer += speedFactor;
+            if (this.timer >= this.stats.fireRate) {
+                let target = null;
+                if (this.typeKey === 'spearman') { // 관통형은 일직선상 적을 찾음
+                    target = enemies.find(e => !e.isGhost && Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2) < this.stats.range);
+                } else {
+                    target = enemies.filter(e => !e.isGhost && Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2) < this.stats.range)
+                                   .sort((a,b) => b.waypointIndex - a.waypointIndex)[0];
+                }
+
+                if (target) {
+                    projectiles.push(new Projectile(this, target));
+                    this.timer = 0;
+                }
+            }
+        }
+    }
+
+    class Projectile {
+        constructor(tower, target) {
+            this.x = tower.x; this.y = tower.y; this.tower = tower; this.target = target;
+            this.speed = 10; this.active = true;
+            if (tower.stats.type === 'pierce') {
+                this.vx = (target.x - tower.x); this.vy = (target.y - tower.y);
+                const mag = Math.sqrt(this.vx**2 + this.vy**2);
+                this.vx = (this.vx/mag)*15; this.vy = (this.vy/mag)*15;
+                this.hitEnemies = new Set();
+            }
+        }
+        update() {
+            if (this.tower.stats.type === 'pierce') {
+                this.x += this.vx; this.y += this.vy;
+                enemies.forEach(e => {
+                    if (!e.isGhost && !this.hitEnemies.has(e.id) && Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2) < 30) {
+                        e.takeDamage(this.tower.stats.damage, this.tower.typeKey);
+                        this.hitEnemies.add(e.id);
+                    }
+                });
+                if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) this.active = false;
+            } else {
+                const dx = this.target.x - this.x, dy = this.target.y - this.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 10) {
+                    if (this.tower.stats.type === 'aoe') {
+                        enemies.forEach(e => {
+                            if (!e.isGhost && Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2) < this.tower.stats.aoeRadius) {
+                                e.takeDamage(this.tower.stats.damage, this.tower.typeKey);
+                                if (this.tower.stats.dot) { e.debuffs.dot = this.tower.stats.dotDuration/16; e.debuffs.dotVal = this.tower.stats.dot; }
+                                if (this.tower.stats.slow) { e.debuffs.slow = 180; }
+                            }
+                        });
+                        effects.push({x: this.x, y: this.y, r: 0, maxR: this.tower.stats.aoeRadius, color: this.tower.stats.color});
+                    } else {
+                        this.target.takeDamage(this.tower.stats.damage, this.tower.typeKey);
+                    }
+                    this.active = false;
+                } else {
+                    this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed;
+                }
+            }
+        }
+        draw() {
+            ctx.fillStyle = this.tower.stats.color; ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!gameRunning) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        upgradeMenu.style.display = 'none';
+
+        if (selectedTowerType) {
+            const cost = towerTypes[selectedTowerType].cost;
+            if (gold >= cost) {
+                towers.push(new Tower(mx, my, selectedTowerType));
+                gold -= cost; selectedTowerType = null;
+                document.querySelectorAll('.tower-slot').forEach(s => s.classList.remove('active'));
+            }
+            return;
+        }
+
+        activeTowerForUI = towers.find(t => Math.sqrt((t.x-mx)**2 + (t.y-my)**2) < 25);
+        if (activeTowerForUI) {
+            upgradeMenu.style.display = 'block';
+            upgradeMenu.style.left = activeTowerForUI.x + 'px';
+            upgradeMenu.style.top = activeTowerForUI.y + 'px';
+            document.getElementById('tower-name-ui').innerText = activeTowerForUI.stats.name;
+        }
+    });
+
+    document.getElementById('start-wave-btn').addEventListener('click', () => {
+        if (isWaveActive || !gameRunning) return;
+        wave++; isWaveActive = true;
+        
+        if (wave === 50) {
+            showMessage("!! 웨이브 50: 버서커 등장 !!", 5000);
+            spawnEnemy('버서커');
+        } else if (wave === 100) {
+            showMessage("!! 최종 웨이브: 초대형 돌 골렘 등장 !!", 5000);
+            spawnEnemy('초대형 돌 골렘');
+        } else {
+            let count = 5 + Math.floor(wave/2);
+            const interval = setInterval(() => {
+                const available = ['고블린'];
+                if (wave >= 3) available.push('오크');
+                if (wave >= 5) available.push('스켈레톤');
+                if (wave >= 8) available.push('나무골렘');
+                if (wave >= 10) available.push('화염골렘');
+                if (wave >= 12) available.push('얼음골렘');
+                if (wave >= 15) available.push('흑마법사');
+                if (wave % 10 === 0) spawnEnemy('산타클로스');
+                else spawnEnemy(available[Math.floor(Math.random()*available.length)]);
+                
+                count--;
+                if (count <= 0) clearInterval(interval);
+            }, 1000);
+        }
+    });
+
+    function update() {
+        if (!gameRunning) { requestAnimationFrame(update); return; }
+        
+        document.getElementById('gold-display').innerText = gold;
+        document.getElementById('health-display').innerText = health;
+        document.getElementById('wave-display').innerText = wave + "/100";
+
+        if (health <= 0) { showMessage("GAME OVER"); setTimeout(() => location.reload(), 3000); return; }
+        if (wave === 100 && isWaveActive && enemies.length === 0) {
+            showMessage("축하합니다! 모든 시련을 이겨내고 승리하셨습니다!", 10000);
+            gameRunning = false;
+        }
+
+        if (isWaveActive && enemies.length === 0) { isWaveActive = false; gold += 100; }
+
+        enemies.forEach((e, i) => { e.update(); if (e.health <= 0 && !e.isGhost) { gold += e.reward; enemies.splice(i, 1); }});
+        towers.forEach(t => t.update());
+        projectiles.forEach((p, i) => { p.update(); if (!p.active) projectiles.splice(i, 1); });
+        effects.forEach((ef, i) => { ef.r += 4; if (ef.r > ef.maxR) effects.splice(i, 1); });
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        // 경로
+        ctx.strokeStyle = mapData[currentMapIndex].path; ctx.lineWidth = 60; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.beginPath(); waypoints.forEach((w, i) => { if (i === 0) ctx.moveTo(w.x, w.y); else ctx.lineTo(w.x, w.y); }); ctx.stroke();
+        
+        towers.forEach(t => t.draw());
+        enemies.forEach(e => e.draw());
+        projectiles.forEach(p => p.draw());
+        effects.forEach(ef => {
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI*2);
+            ctx.strokeStyle = ef.color; ctx.globalAlpha = 1 - (ef.r/ef.maxR); ctx.stroke(); ctx.globalAlpha = 1;
+        });
+    }
+
+    update();
+</script>
+</body>
+</html>
