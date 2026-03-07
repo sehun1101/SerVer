@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>60 Dynamic Links Dashboard</title>
+    <title>60 Individual Links Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
@@ -62,54 +62,17 @@
             transform: scale(1.05);
         }
 
+        .animate-item {
+            animation: fadeIn 0.5s ease forwards;
+            opacity: 0;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .animate-item {
-            animation: fadeIn 0.5s ease forwards;
-        }
     </style>
 </head>
-<script>
-    // 60개의 데이터 생성 (모든 URL을 구글로 설정)
-    const sites = Array.from({ length: 60 }, (_, i) => ({
-        id: i + 1,
-        name: `Google ${String(i + 1).padStart(2, '0')}`,
-        url: `https://www.google.com`,
-        emoji: ['🚀', '🌐', '🎨', '⚡', '💻', '🔍', '📱', '🎮', '💡', '🎵'][i % 10]
-    }));
-
-    function createButtons() {
-        const container = document.getElementById('button-container');
-        sites.forEach((site, index) => {
-            const btn = document.createElement('button');
-            btn.className = `link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group`;
-            btn.style.animationDelay = `${index * 0.01}s`;
-            btn.onclick = () => navigate(site.url, site.name);
-            
-            btn.innerHTML = `
-                <span class="text-2xl group-hover:scale-125 transition-transform">${site.emoji}</span>
-                <span class="text-xs font-medium text-white/80 group-hover:text-white">${site.name}</span>
-            `;
-            container.appendChild(btn);
-        });
-    }
-
-    function navigate(url, name) {
-        const loader = document.getElementById('loader');
-        const targetText = document.getElementById('target-name');
-        loader.classList.remove('hidden');
-        targetText.innerText = `${name}으로 이동 중...`;
-        
-        setTimeout(() => {
-            window.location.href = url;
-        }, 600);
-    }
-
-    window.onload = createButtons;
-</script>
 <body class="p-6 md:p-12 relative">
 
     <!-- Home Button (Top Left) -->
@@ -123,15 +86,276 @@
     <!-- Header -->
     <header class="max-w-6xl w-full mb-10 text-center">
         <h1 class="text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-4">
-            탐색 대시보드
+            커스텀 내비게이션
         </h1>
-        <p class="text-slate-400 text-lg">60개의 버튼이 준비되어 있습니다</p>
+        <p class="text-slate-400 text-lg">각 버튼을 원하는 사이트로 개별 설정하세요</p>
     </header>
 
     <!-- Main Container -->
     <main class="glass-panel max-w-6xl w-full p-6 md:p-8 flex flex-col h-[70vh]">
         <div id="button-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-4 overflow-y-auto pr-2 custom-scrollbar">
-            <!-- JavaScript가 여기에 버튼을 생성합니다 -->
+            
+            <!-- 버튼 60개 개별 코드 시작 -->
+            <button onclick="navigate('https://www.google.com', 'Site 01')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.01s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 01</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 02')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.02s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 02</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 03')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.03s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 03</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 04')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.04s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 04</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 05')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.05s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 05</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 06')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.06s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 06</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 07')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.07s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 07</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 08')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.08s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 08</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 09')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.09s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 09</span>
+            </button>
+
+            <button onclick="navigate('https://www.google.com', 'Site 10')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.1s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 10</span>
+            </button>
+
+            <!-- 11 ~ 20 -->
+            <button onclick="navigate('https://www.google.com', 'Site 11')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.11s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 11</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 12')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.12s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 12</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 13')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.13s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 13</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 14')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.14s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 14</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 15')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.15s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 15</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 16')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.16s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 16</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 17')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.17s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 17</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 18')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.18s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 18</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 19')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.19s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 19</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 20')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.2s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 20</span>
+            </button>
+
+            <!-- 21 ~ 30 -->
+            <button onclick="navigate('https://www.google.com', 'Site 21')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.21s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 21</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 22')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.22s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 22</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 23')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.23s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 23</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 24')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.24s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 24</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 25')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.25s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 25</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 26')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.26s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 26</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 27')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.27s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 27</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 28')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.28s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 28</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 29')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.29s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 29</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 30')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.3s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 30</span>
+            </button>
+
+            <!-- 31 ~ 40 -->
+            <button onclick="navigate('https://www.google.com', 'Site 31')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.31s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 31</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 32')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.32s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 32</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 33')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.33s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 33</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 34')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.34s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 34</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 35')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.35s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 35</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 36')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.36s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 36</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 37')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.37s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 37</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 38')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.38s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 38</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 39')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.39s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 39</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 40')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.4s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 40</span>
+            </button>
+
+            <!-- 41 ~ 50 -->
+            <button onclick="navigate('https://www.google.com', 'Site 41')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.41s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 41</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 42')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.42s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 42</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 43')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.43s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 43</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 44')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.44s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 44</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 45')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.45s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 45</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 46')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.46s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 46</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 47')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.47s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 47</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 48')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.48s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 48</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 49')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.49s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 49</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 50')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.5s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 50</span>
+            </button>
+
+            <!-- 51 ~ 60 -->
+            <button onclick="navigate('https://www.google.com', 'Site 51')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.51s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🚀</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 51</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 52')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.52s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🌐</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 52</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 53')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.53s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎨</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 53</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 54')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.54s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">⚡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 54</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 55')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.55s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💻</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 55</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 56')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.56s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🔍</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 56</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 57')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.57s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">📱</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 57</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 58')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.58s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎮</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 58</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 59')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.59s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">💡</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 59</span>
+            </button>
+            <button onclick="navigate('https://www.google.com', 'Site 60')" class="link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group" style="animation-delay: 0.6s">
+                <span class="text-2xl group-hover:scale-125 transition-transform">🎵</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">Site 60</span>
+            </button>
+
         </div>
     </main>
 
@@ -143,9 +367,22 @@
         </div>
     </div>
 
+    <script>
+        function navigate(url, name) {
+            const loader = document.getElementById('loader');
+            const targetText = document.getElementById('target-name');
+            loader.classList.remove('hidden');
+            targetText.innerText = `${name}으로 이동 중...`;
+            
+            setTimeout(() => {
+                window.location.href = url;
+            }, 600);
+        }
+    </script>
+
     <!-- Footer -->
     <footer class="mt-8 text-slate-500 text-sm">
-        &copy; 2024 Dynamic Navigation System
+        &copy; 2024 Individual Navigation Dashboard
     </footer>
 
 </body>
