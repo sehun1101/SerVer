@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>60 Dynamic Links Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background: radial-gradient(circle at top left, #1e293b, #0f172a);
+            min-height: 100vh;
+            margin: 0;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.5rem;
+        }
+
+        .link-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .link-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .home-button {
+            transition: all 0.3s ease;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.5);
+        }
+
+        .home-button:hover {
+            background: rgba(59, 130, 246, 0.4);
+            transform: scale(1.05);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-item {
+            animation: fadeIn 0.5s ease forwards;
+        }
+    </style>
+</head>
+<script>
+    // 60개의 데이터 생성 (모든 URL을 구글로 설정)
+    const sites = Array.from({ length: 60 }, (_, i) => ({
+        id: i + 1,
+        name: `Google ${String(i + 1).padStart(2, '0')}`,
+        url: `https://www.google.com`,
+        emoji: ['🚀', '🌐', '🎨', '⚡', '💻', '🔍', '📱', '🎮', '💡', '🎵'][i % 10]
+    }));
+
+    function createButtons() {
+        const container = document.getElementById('button-container');
+        sites.forEach((site, index) => {
+            const btn = document.createElement('button');
+            btn.className = `link-card animate-item p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center gap-2 group`;
+            btn.style.animationDelay = `${index * 0.01}s`;
+            btn.onclick = () => navigate(site.url, site.name);
+            
+            btn.innerHTML = `
+                <span class="text-2xl group-hover:scale-125 transition-transform">${site.emoji}</span>
+                <span class="text-xs font-medium text-white/80 group-hover:text-white">${site.name}</span>
+            `;
+            container.appendChild(btn);
+        });
+    }
+
+    function navigate(url, name) {
+        const loader = document.getElementById('loader');
+        const targetText = document.getElementById('target-name');
+        loader.classList.remove('hidden');
+        targetText.innerText = `${name}으로 이동 중...`;
+        
+        setTimeout(() => {
+            window.location.href = url;
+        }, 600);
+    }
+
+    window.onload = createButtons;
+</script>
+<body class="p-6 md:p-12 relative">
+
+    <!-- Home Button (Top Left) -->
+    <div class="absolute top-6 left-6 z-20">
+        <button onclick="navigate('https://sehun1101.github.io/SerVer/index.html', 'Home')" class="home-button flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white">
+            <span>🏠</span>
+            <span>HOME</span>
+        </button>
+    </div>
+
+    <!-- Header -->
+    <header class="max-w-6xl w-full mb-10 text-center">
+        <h1 class="text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-4">
+            탐색 대시보드
+        </h1>
+        <p class="text-slate-400 text-lg">60개의 버튼이 준비되어 있습니다</p>
+    </header>
+
+    <!-- Main Container -->
+    <main class="glass-panel max-w-6xl w-full p-6 md:p-8 flex flex-col h-[70vh]">
+        <div id="button-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-4 overflow-y-auto pr-2 custom-scrollbar">
+            <!-- JavaScript가 여기에 버튼을 생성합니다 -->
+        </div>
+    </main>
+
+    <!-- Overlay Loader -->
+    <div id="loader" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 hidden">
+        <div class="text-center">
+            <div class="inline-block w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p class="text-xl font-bold text-white"><span id="target-name">연결 중...</span></p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-slate-500 text-sm">
+        &copy; 2024 Dynamic Navigation System
+    </footer>
+
+</body>
+</html>
