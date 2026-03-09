@@ -76,12 +76,13 @@
         const START_SAFE_ZONE = 1000;
         const END_SAFE_ZONE = 29000;
         const ZOMBIE_ATTACK_DAMAGE = 10;
-        const ZOMBIE_ATTACK_COOLDOWN = 500; // 0.5초
+        const ZOMBIE_ATTACK_COOLDOWN = 500; 
+        const OUTPOST_RADIUS = 500; 
 
         const WEAPONS = {
             PISTOL: { fireRate: 500, range: 450, bulletSpeed: 16, damage: 1, color: '#ecf0f1' },
             SHOTGUN: { fireRate: 1100, range: 300, bulletSpeed: 12, damage: 2, color: '#f1c40f', pellets: 6 },
-            RIFLE: { fireRate: 150, range: 600, bulletSpeed: 20, damage: 1.2, color: '#e67e22' }
+            RIFLE: { fireRate: 100, range: 600, bulletSpeed: 20, damage: 1.2, color: '#e67e22' } // 0.1초 연사로 조정
         };
 
         const game = {
@@ -89,6 +90,7 @@
             hasWon: false,
             keys: {},
             mouse: { x: 0, y: 0 },
+            isMouseDown: false,
             cameraX: 0,
             isHordeActive: false,
             outposts: [
@@ -108,6 +110,7 @@
             maxHp: 1000,
             ammo: 30,
             reloading: false,
+            lastShot: 0,
             weapon: WEAPONS.RIFLE
         };
 
@@ -151,7 +154,6 @@
                 if (sx < -200 || sx > canvas.width + 200) return false;
                 ctx.fillStyle = this.color;
                 ctx.fillRect(sx - 60, this.y - 60, 120, 120);
-                // HP Bar
                 ctx.fillStyle = '#444';
                 ctx.fillRect(sx - 40, this.y - 80, 80, 6);
                 ctx.fillStyle = '#e74c3c';
@@ -162,9 +164,9 @@
 
         class SurvivorAI extends Entity {
             constructor(x, y, type = 'SURVIVOR') {
-                let color = '#3498db'; // 동료
+                let color = '#3498db'; 
                 if (type === 'RECRUITABLE') color = '#f1c40f';
-                if (type === 'MILITARY') color = '#27ae60'; // 군인
+                if (type === 'MILITARY') color = '#27ae60'; 
                 
                 super(x, y, 18, color);
                 this.type = type;
@@ -192,23 +194,27 @@
                 }
 
                 if (this.type === 'MILITARY' && this.parentOutpost) {
-                    // 군인 AI 로직: 기지 방어 및 좀비 추격
-                    if (nearestZombie && distToZombie < 600) {
+                    const distFromOutpostCenter = Math.abs(this.x - (this.parentOutpost.x + 400));
+                    
+                    if (nearestZombie && distToZombie < 600 && distFromOutpostCenter < OUTPOST_RADIUS) {
                         const angle = Math.atan2(nearestZombie.y - this.y, nearestZombie.x - this.x);
-                        // 사거리 유지하며 접근
                         if (distToZombie > 150) {
                             this.x += Math.cos(angle) * this.speed;
                             this.y += Math.sin(angle) * this.speed;
                         }
                     } else {
-                        // 순찰 로직
-                        if (Date.now() - this.lastPatrolUpdate > 3000) {
+                        if (distFromOutpostCenter > OUTPOST_RADIUS - 50) {
+                            const angle = Math.atan2(canvas.height / 2 - this.y, (this.parentOutpost.x + 400) - this.x);
+                            this.x += Math.cos(angle) * this.speed;
+                            this.y += Math.sin(angle) * this.speed;
+                        } else if (Date.now() - this.lastPatrolUpdate > 3000) {
                             this.patrolTarget = {
-                                x: this.parentOutpost.x + 400 + (Math.random() - 0.5) * 600,
-                                y: canvas.height / 2 + (Math.random() - 0.5) * (canvas.height - 100)
+                                x: this.parentOutpost.x + 400 + (Math.random() - 0.5) * (OUTPOST_RADIUS * 1.5),
+                                y: canvas.height / 2 + (Math.random() - 0.5) * (canvas.height - 200)
                             };
                             this.lastPatrolUpdate = Date.now();
                         }
+
                         const pDist = Math.hypot(this.patrolTarget.x - this.x, this.patrolTarget.y - this.y);
                         if (pDist > 10) {
                             const angle = Math.atan2(this.patrolTarget.y - this.y, this.patrolTarget.x - this.x);
@@ -217,7 +223,6 @@
                         }
                     }
                 } else if (this.type === 'SURVIVOR') {
-                    // 플레이어 동료 로직
                     const tx = player.x + this.offset.x;
                     const ty = player.y + this.offset.y;
                     const d = Math.hypot(tx - this.x, ty - this.y);
@@ -297,7 +302,6 @@
                 this.x += Math.cos(angle) * this.speed;
                 this.y += Math.sin(angle) * this.speed;
 
-                // 공격 판정
                 if (minD < this.radius + target.radius) {
                     const now = Date.now();
                     if (now - target.lastDamageTime > ZOMBIE_ATTACK_COOLDOWN) {
@@ -312,7 +316,6 @@
             }
         }
 
-        // 초기화 로직
         for (let i = 0; i < 3; i++) survivors.push(new SurvivorAI(player.x - 60, player.y + (i-1)*60));
         
         for (let i = 0; i < 10; i++) {
@@ -320,9 +323,7 @@
         }
 
         game.outposts.forEach(outpost => {
-            // 중심 건물
             outpostBuildings.push(new Building(outpost.x + 400, canvas.height / 2));
-            // 군인 배치 (4~24명)
             const count = Math.floor(Math.random() * 21) + 4;
             for(let j=0; j<count; j++) {
                 const guard = new SurvivorAI(outpost.x + 400 + (Math.random()-0.5)*400, (canvas.height/count)*j + 50, 'MILITARY');
@@ -364,6 +365,31 @@
 
         setInterval(() => { if (Math.random() < 0.15) triggerHorde(); }, 15000);
 
+        function handlePlayerShooting() {
+            if (game.isMouseDown && !player.reloading && !game.isGameOver) {
+                const now = Date.now();
+                if (now - player.lastShot > player.weapon.fireRate) {
+                    const spx = player.x - game.cameraX;
+                    const angle = Math.atan2(game.mouse.y - player.y, game.mouse.x - spx);
+                    bullets.push(new Bullet(player.x, player.y, angle, true, player.weapon));
+                    player.ammo--;
+                    player.lastShot = now;
+                    
+                    ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`;
+                    
+                    if (player.ammo <= 0) {
+                        player.reloading = true; 
+                        ammoDisplay.textContent = "RELOADING...";
+                        setTimeout(() => { 
+                            player.ammo = 30; 
+                            player.reloading = false; 
+                            ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`; 
+                        }, 1000);
+                    }
+                }
+            }
+        }
+
         function animate() {
             ctx.fillStyle = '#080808';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -371,7 +397,6 @@
             game.cameraX = player.x - canvas.width / 4;
             game.cameraX = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, game.cameraX));
 
-            // 배경 그리기
             ctx.fillStyle = 'rgba(46, 204, 113, 0.05)';
             ctx.fillRect(0 - game.cameraX, 0, START_SAFE_ZONE, canvas.height);
             ctx.fillRect(END_SAFE_ZONE - game.cameraX, 0, WORLD_WIDTH - END_SAFE_ZONE, canvas.height);
@@ -393,9 +418,11 @@
                     document.getElementById('win-screen').classList.remove('hidden');
                     document.getElementById('final-stats').textContent = `${survivors.length + 1}명의 대원이 탈출에 성공했습니다.`;
                 }
+
+                // 매 프레임 사격 체크
+                handlePlayerShooting();
             }
 
-            // 아웃포스트 건물
             for (let i = outpostBuildings.length - 1; i >= 0; i--) {
                 outpostBuildings[i].draw();
                 if (outpostBuildings[i].hp <= 0) {
@@ -404,7 +431,6 @@
                 }
             }
 
-            // 대원들
             recruitables.forEach(r => { r.update(); r.draw(); });
             
             [...militaryGuards, ...survivors].forEach((s, idx, arr) => {
@@ -417,7 +443,6 @@
                 }
             });
 
-            // Player
             const spx = player.x - game.cameraX;
             ctx.save(); ctx.translate(spx, player.y);
             ctx.rotate(Math.atan2(game.mouse.y - player.y, game.mouse.x - spx));
@@ -426,7 +451,6 @@
             ctx.fillStyle = '#111'; ctx.fillRect(12, -4, 25, 8);
             ctx.restore();
 
-            // Bullets
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].update(); bullets[i].draw();
                 for (let j = zombies.length - 1; j >= 0; j--) {
@@ -440,7 +464,6 @@
                 if (bullets[i] && bullets[i].life <= 0) bullets.splice(i, 1);
             }
 
-            // Zombies
             for (let i = zombies.length - 1; i >= 0; i--) {
                 zombies[i].update();
                 if (zombies[i].draw()) {
@@ -450,7 +473,6 @@
                 }
             }
 
-            // UI 업데이트
             hpBarFill.style.width = `${(player.hp / player.maxHp) * 100}%`;
             playerHpText.textContent = `HP: ${Math.max(0, Math.floor(player.hp))} / 1000`;
             zombieCountDisplay.textContent = `Zombies Near: ${zombies.length}`;
@@ -463,18 +485,12 @@
         window.addEventListener('keydown', e => game.keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', e => game.keys[e.key.toLowerCase()] = false);
         window.addEventListener('mousemove', e => { game.mouse.x = e.clientX; game.mouse.y = e.clientY; });
-        window.addEventListener('mousedown', () => {
-            if (player.reloading || game.isGameOver) return;
-            const spx = player.x - game.cameraX;
-            const angle = Math.atan2(game.mouse.y - player.y, game.mouse.x - spx);
-            bullets.push(new Bullet(player.x, player.y, angle, true, player.weapon));
-            player.ammo--;
-            ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`;
-            if (player.ammo <= 0) {
-                player.reloading = true; ammoDisplay.textContent = "RELOADING...";
-                setTimeout(() => { player.ammo = 30; player.reloading = false; ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`; }, 1000);
-            }
-        });
+        
+        // 마우스 누름/뗌 상태 관리
+        window.addEventListener('mousedown', () => { game.isMouseDown = true; });
+        window.addEventListener('mouseup', () => { game.isMouseDown = false; });
+        // 캔버스를 벗어나면 사격 중지
+        window.addEventListener('mouseleave', () => { game.isMouseDown = false; });
 
         spawnLoop();
         animate();
