@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L4D Style: Military Outpost Defense</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', monospace; }
+        canvas { display: block; cursor: crosshair; }
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; padding: 20px; color: #ff4444; text-shadow: 2px 2px 4px #000;
+        }
+        .horde-warning {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 5rem; font-weight: 900; color: #ff0000; opacity: 0;
+            text-align: center; pointer-events: none; z-index: 50;
+            animation: blink 0.5s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="flex justify-between items-start">
+            <div>
+                <h1 class="text-3xl font-bold uppercase tracking-tighter text-red-700">EXTREME HORDE: MILITARY</h1>
+                <p id="survivor-count" class="text-xl text-green-500">Survivors: 4 / 12</p>
+                <p id="zombie-count" class="text-sm text-red-500 font-bold">Zombies Near: 0</p>
+                <p id="dist-info" class="text-sm text-gray-400 font-bold">Progress: 0%</p>
+            </div>
+            <div class="text-right">
+                <div class="w-48 h-4 bg-gray-900 border border-red-900 mb-1">
+                    <div id="hp-bar-fill" class="h-full bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]" style="width: 100%;"></div>
+                </div>
+                <p id="player-hp-text" class="text-xs text-white mb-2">HP: 1000 / 1000</p>
+                <p id="ammo-count" class="text-2xl italic font-black">AMMO: 30 / ∞</p>
+                <p id="status-msg" class="text-sm italic text-yellow-500 font-bold"></p>
+            </div>
+        </div>
+        
+        <div id="horde-alert" class="horde-warning hidden">! WARNING: MASSIVE HORDE !</div>
+
+        <div id="death-screen" class="hidden absolute inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center pointer-events-auto">
+            <h2 class="text-7xl font-black mb-4 text-red-600">TEAM WIPED</h2>
+            <button onclick="location.reload()" class="px-10 py-4 bg-red-700 text-white font-bold hover:bg-red-600 transition border-2 border-red-500">RETRY</button>
+        </div>
+
+        <div id="win-screen" class="hidden absolute inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center pointer-events-auto">
+            <h2 class="text-7xl font-black mb-4 text-green-500">MISSION COMPLETE</h2>
+            <p id="final-stats" class="text-xl mb-8 text-white"></p>
+            <button onclick="location.reload()" class="px-10 py-4 bg-green-700 text-white font-bold hover:bg-green-600 transition border-2 border-green-500">CONTINUE</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hpBarFill = document.getElementById('hp-bar-fill');
+        const playerHpText = document.getElementById('player-hp-text');
+        const ammoDisplay = document.getElementById('ammo-count');
+        const survivorDisplay = document.getElementById('survivor-count');
+        const zombieCountDisplay = document.getElementById('zombie-count');
+        const distDisplay = document.getElementById('dist-info');
+        const statusMsg = document.getElementById('status-msg');
+        const hordeAlert = document.getElementById('horde-alert');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const WORLD_WIDTH = 30000;
+        const START_SAFE_ZONE = 1000;
+        const END_SAFE_ZONE = 29000;
+        const ZOMBIE_ATTACK_DAMAGE = 10;
+        const ZOMBIE_ATTACK_COOLDOWN = 500; // 0.5초
+
+        const WEAPONS = {
+            PISTOL: { fireRate: 500, range: 450, bulletSpeed: 16, damage: 1, color: '#ecf0f1' },
+            SHOTGUN: { fireRate: 1100, range: 300, bulletSpeed: 12, damage: 2, color: '#f1c40f', pellets: 6 },
+            RIFLE: { fireRate: 150, range: 600, bulletSpeed: 20, damage: 1.2, color: '#e67e22' }
+        };
+
+        const game = {
+            isGameOver: false,
+            hasWon: false,
+            keys: {},
+            mouse: { x: 0, y: 0 },
+            cameraX: 0,
+            isHordeActive: false,
+            outposts: [
+                { x: 5000, guards: [] },
+                { x: 12000, guards: [] },
+                { x: 20000, guards: [] }
+            ]
+        };
+
+        const player = {
+            x: 500,
+            y: canvas.height / 2,
+            radius: 20,
+            color: '#2ecc71',
+            speed: 5.5,
+            hp: 1000,
+            maxHp: 1000,
+            ammo: 30,
+            reloading: false,
+            weapon: WEAPONS.RIFLE
+        };
+
+        const survivors = [];
+        const recruitables = [];
+        const bullets = [];
+        const zombies = [];
+        const outpostBuildings = [];
+        const militaryGuards = [];
+
+        class Entity {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.hp = 1000;
+                this.maxHp = 1000;
+                this.lastDamageTime = 0;
+            }
+            draw() {
+                const sx = this.x - game.cameraX;
+                if (sx < -200 || sx > canvas.width + 200) return false;
+                ctx.beginPath();
+                ctx.arc(sx, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+                return true;
+            }
+        }
+
+        class Building extends Entity {
+            constructor(x, y) {
+                super(x, y, 60, '#2c3e50');
+                this.hp = 500;
+                this.maxHp = 500;
+            }
+            draw() {
+                const sx = this.x - game.cameraX;
+                if (sx < -200 || sx > canvas.width + 200) return false;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(sx - 60, this.y - 60, 120, 120);
+                // HP Bar
+                ctx.fillStyle = '#444';
+                ctx.fillRect(sx - 40, this.y - 80, 80, 6);
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillRect(sx - 40, this.y - 80, 80 * (this.hp / this.maxHp), 6);
+                return true;
+            }
+        }
+
+        class SurvivorAI extends Entity {
+            constructor(x, y, type = 'SURVIVOR') {
+                let color = '#3498db'; // 동료
+                if (type === 'RECRUITABLE') color = '#f1c40f';
+                if (type === 'MILITARY') color = '#27ae60'; // 군인
+                
+                super(x, y, 18, color);
+                this.type = type;
+                this.speed = 4.5 + Math.random();
+                this.lastShot = 0;
+                const wTypes = Object.keys(WEAPONS);
+                this.weapon = (type === 'MILITARY') ? WEAPONS.RIFLE : WEAPONS[wTypes[Math.floor(Math.random() * wTypes.length)]];
+                this.offset = { x: (Math.random()-0.5)*200, y: (Math.random()-0.5)*200 };
+                this.patrolTarget = { x: x, y: y };
+                this.lastPatrolUpdate = 0;
+                this.parentOutpost = null;
+            }
+
+            update() {
+                if (this.type === 'RECRUITABLE') {
+                    if (Math.hypot(player.x - this.x, player.y - this.y) < 120) this.recruit();
+                    return;
+                }
+
+                const nearestZombie = this.findNearestZombie();
+                const distToZombie = nearestZombie ? Math.hypot(nearestZombie.x - this.x, nearestZombie.y - this.y) : Infinity;
+
+                if (nearestZombie && distToZombie < this.weapon.range) {
+                    this.shoot(nearestZombie);
+                }
+
+                if (this.type === 'MILITARY' && this.parentOutpost) {
+                    // 군인 AI 로직: 기지 방어 및 좀비 추격
+                    if (nearestZombie && distToZombie < 600) {
+                        const angle = Math.atan2(nearestZombie.y - this.y, nearestZombie.x - this.x);
+                        // 사거리 유지하며 접근
+                        if (distToZombie > 150) {
+                            this.x += Math.cos(angle) * this.speed;
+                            this.y += Math.sin(angle) * this.speed;
+                        }
+                    } else {
+                        // 순찰 로직
+                        if (Date.now() - this.lastPatrolUpdate > 3000) {
+                            this.patrolTarget = {
+                                x: this.parentOutpost.x + 400 + (Math.random() - 0.5) * 600,
+                                y: canvas.height / 2 + (Math.random() - 0.5) * (canvas.height - 100)
+                            };
+                            this.lastPatrolUpdate = Date.now();
+                        }
+                        const pDist = Math.hypot(this.patrolTarget.x - this.x, this.patrolTarget.y - this.y);
+                        if (pDist > 10) {
+                            const angle = Math.atan2(this.patrolTarget.y - this.y, this.patrolTarget.x - this.x);
+                            this.x += Math.cos(angle) * (this.speed * 0.5);
+                            this.y += Math.sin(angle) * (this.speed * 0.5);
+                        }
+                    }
+                } else if (this.type === 'SURVIVOR') {
+                    // 플레이어 동료 로직
+                    const tx = player.x + this.offset.x;
+                    const ty = player.y + this.offset.y;
+                    const d = Math.hypot(tx - this.x, ty - this.y);
+                    if (d > 30) {
+                        const angle = Math.atan2(ty - this.y, tx - this.x);
+                        this.x += Math.cos(angle) * this.speed;
+                        this.y += Math.sin(angle) * this.speed;
+                    }
+                }
+            }
+
+            recruit() {
+                this.type = 'SURVIVOR';
+                this.color = '#3498db';
+                survivors.push(this);
+                const idx = recruitables.indexOf(this);
+                if (idx > -1) recruitables.splice(idx, 1);
+                showMessage("새 동료가 합류했습니다!");
+            }
+
+            findNearestZombie() {
+                let minD = Infinity;
+                let found = null;
+                for(let z of zombies) {
+                    const d = Math.hypot(z.x - this.x, z.y - this.y);
+                    if (d < minD) { minD = d; found = z; }
+                }
+                return found;
+            }
+
+            shoot(z) {
+                if (Date.now() - this.lastShot > this.weapon.fireRate) {
+                    const angle = Math.atan2(z.y - this.y, z.x - this.x);
+                    bullets.push(new Bullet(this.x, this.y, angle, false, this.weapon));
+                    this.lastShot = Date.now();
+                }
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, angle, isPlayer, config) {
+                this.x = x; this.y = y;
+                this.speed = config.bulletSpeed;
+                this.damage = config.damage;
+                this.color = config.color;
+                this.velocity = { x: Math.cos(angle) * this.speed, y: Math.sin(angle) * this.speed };
+                this.life = 80;
+            }
+            draw() {
+                const sx = this.x - game.cameraX;
+                ctx.beginPath();
+                ctx.moveTo(sx, this.y);
+                ctx.lineTo(sx - this.velocity.x, this.y - this.velocity.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            update() { this.x += this.velocity.x; this.y += this.velocity.y; this.life--; }
+        }
+
+        class Zombie extends Entity {
+            constructor(isHorde = false) {
+                const side = Math.random() > 0.5 ? 1 : -1;
+                super(game.cameraX + (side === 1 ? canvas.width + 200 : -200), Math.random() * canvas.height, 16 + Math.random()*4, isHorde ? '#ff2200' : '#8b0000');
+                this.speed = 2.0 + (Math.random() * 2.5);
+                this.hp = 2.5;
+            }
+            update() {
+                let targets = [player, ...survivors, ...militaryGuards, ...outpostBuildings];
+                let minD = Infinity;
+                let target = player;
+                for(let t of targets) {
+                    const d = Math.hypot(t.x - this.x, t.y - this.y);
+                    if (d < minD) { minD = d; target = t; }
+                }
+                const angle = Math.atan2(target.y - this.y, target.x - this.x);
+                this.x += Math.cos(angle) * this.speed;
+                this.y += Math.sin(angle) * this.speed;
+
+                // 공격 판정
+                if (minD < this.radius + target.radius) {
+                    const now = Date.now();
+                    if (now - target.lastDamageTime > ZOMBIE_ATTACK_COOLDOWN) {
+                        if (target instanceof Building) {
+                            target.hp -= 1;
+                        } else {
+                            target.hp -= ZOMBIE_ATTACK_DAMAGE;
+                        }
+                        target.lastDamageTime = now;
+                    }
+                }
+            }
+        }
+
+        // 초기화 로직
+        for (let i = 0; i < 3; i++) survivors.push(new SurvivorAI(player.x - 60, player.y + (i-1)*60));
+        
+        for (let i = 0; i < 10; i++) {
+            recruitables.push(new SurvivorAI(3500 + i * 2500 + Math.random()*500, Math.random() * canvas.height, 'RECRUITABLE'));
+        }
+
+        game.outposts.forEach(outpost => {
+            // 중심 건물
+            outpostBuildings.push(new Building(outpost.x + 400, canvas.height / 2));
+            // 군인 배치 (4~24명)
+            const count = Math.floor(Math.random() * 21) + 4;
+            for(let j=0; j<count; j++) {
+                const guard = new SurvivorAI(outpost.x + 400 + (Math.random()-0.5)*400, (canvas.height/count)*j + 50, 'MILITARY');
+                guard.parentOutpost = outpost;
+                militaryGuards.push(guard);
+            }
+        });
+
+        function showMessage(msg) {
+            statusMsg.textContent = msg;
+            setTimeout(() => statusMsg.textContent = "", 4000);
+        }
+
+        function spawnLoop() {
+            if (game.isGameOver || game.hasWon) return;
+            const progress = player.x / WORLD_WIDTH;
+            const maxZombies = 40 + (progress * 160);
+            const spawnRate = Math.max(40, 350 - (progress * 300));
+
+            if (zombies.length < maxZombies) {
+                zombies.push(new Zombie(game.isHordeActive));
+            }
+            setTimeout(spawnLoop, spawnRate);
+        }
+
+        function triggerHorde() {
+            if (game.isGameOver || game.hasWon || game.isHordeActive) return;
+            game.isHordeActive = true;
+            hordeAlert.classList.remove('hidden');
+            let count = 0;
+            const hInterval = setInterval(() => {
+                for(let i=0; i<6; i++) zombies.push(new Zombie(true));
+                if (++count > 30) {
+                    clearInterval(hInterval);
+                    setTimeout(() => { game.isHordeActive = false; hordeAlert.classList.add('hidden'); }, 7000);
+                }
+            }, 120);
+        }
+
+        setInterval(() => { if (Math.random() < 0.15) triggerHorde(); }, 15000);
+
+        function animate() {
+            ctx.fillStyle = '#080808';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            game.cameraX = player.x - canvas.width / 4;
+            game.cameraX = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, game.cameraX));
+
+            // 배경 그리기
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.05)';
+            ctx.fillRect(0 - game.cameraX, 0, START_SAFE_ZONE, canvas.height);
+            ctx.fillRect(END_SAFE_ZONE - game.cameraX, 0, WORLD_WIDTH - END_SAFE_ZONE, canvas.height);
+            game.outposts.forEach(ox => {
+                ctx.fillStyle = 'rgba(39, 174, 96, 0.08)';
+                ctx.fillRect(ox.x - game.cameraX, 0, 800, canvas.height);
+            });
+
+            if (!game.isGameOver && !game.hasWon) {
+                if (game.keys['w']) player.y -= player.speed;
+                if (game.keys['s']) player.y += player.speed;
+                if (game.keys['a']) player.x -= player.speed;
+                if (game.keys['d']) player.x += player.speed;
+                player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
+                player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
+
+                if (player.x > END_SAFE_ZONE + 300) {
+                    game.hasWon = true;
+                    document.getElementById('win-screen').classList.remove('hidden');
+                    document.getElementById('final-stats').textContent = `${survivors.length + 1}명의 대원이 탈출에 성공했습니다.`;
+                }
+            }
+
+            // 아웃포스트 건물
+            for (let i = outpostBuildings.length - 1; i >= 0; i--) {
+                outpostBuildings[i].draw();
+                if (outpostBuildings[i].hp <= 0) {
+                    outpostBuildings.splice(i, 1);
+                    showMessage("경고: 기지의 건물이 파괴되었습니다!");
+                }
+            }
+
+            // 대원들
+            recruitables.forEach(r => { r.update(); r.draw(); });
+            
+            [...militaryGuards, ...survivors].forEach((s, idx, arr) => {
+                s.update();
+                if (s.draw()) {
+                    if (s.hp <= 0) {
+                        if (s.type === 'MILITARY') militaryGuards.splice(militaryGuards.indexOf(s), 1);
+                        else survivors.splice(survivors.indexOf(s), 1);
+                    }
+                }
+            });
+
+            // Player
+            const spx = player.x - game.cameraX;
+            ctx.save(); ctx.translate(spx, player.y);
+            ctx.rotate(Math.atan2(game.mouse.y - player.y, game.mouse.x - spx));
+            ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.color; ctx.fill();
+            ctx.fillStyle = '#111'; ctx.fillRect(12, -4, 25, 8);
+            ctx.restore();
+
+            // Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].update(); bullets[i].draw();
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    if (Math.hypot(bullets[i].x - zombies[j].x, bullets[i].y - zombies[j].y) < zombies[j].radius) {
+                        zombies[j].hp -= bullets[i].damage;
+                        bullets.splice(i, 1);
+                        if (zombies[j].hp <= 0) zombies.splice(j, 1);
+                        break;
+                    }
+                }
+                if (bullets[i] && bullets[i].life <= 0) bullets.splice(i, 1);
+            }
+
+            // Zombies
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                zombies[i].update();
+                if (zombies[i].draw()) {
+                    if (player.hp <= 0) { game.isGameOver = true; document.getElementById('death-screen').classList.remove('hidden'); }
+                } else if (Math.abs(zombies[i].x - player.x) > 2500) {
+                    zombies.splice(i, 1);
+                }
+            }
+
+            // UI 업데이트
+            hpBarFill.style.width = `${(player.hp / player.maxHp) * 100}%`;
+            playerHpText.textContent = `HP: ${Math.max(0, Math.floor(player.hp))} / 1000`;
+            zombieCountDisplay.textContent = `Zombies Near: ${zombies.length}`;
+            distDisplay.textContent = `Progress: ${Math.floor((player.x / WORLD_WIDTH) * 100)}%`;
+            survivorDisplay.textContent = `Squad: ${survivors.length + 1} | Military: ${militaryGuards.length}`;
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('keydown', e => game.keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => game.keys[e.key.toLowerCase()] = false);
+        window.addEventListener('mousemove', e => { game.mouse.x = e.clientX; game.mouse.y = e.clientY; });
+        window.addEventListener('mousedown', () => {
+            if (player.reloading || game.isGameOver) return;
+            const spx = player.x - game.cameraX;
+            const angle = Math.atan2(game.mouse.y - player.y, game.mouse.x - spx);
+            bullets.push(new Bullet(player.x, player.y, angle, true, player.weapon));
+            player.ammo--;
+            ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`;
+            if (player.ammo <= 0) {
+                player.reloading = true; ammoDisplay.textContent = "RELOADING...";
+                setTimeout(() => { player.ammo = 30; player.reloading = false; ammoDisplay.textContent = `AMMO: ${player.ammo} / ∞`; }, 1000);
+            }
+        });
+
+        spawnLoop();
+        animate();
+    </script>
+</body>
+</html>
