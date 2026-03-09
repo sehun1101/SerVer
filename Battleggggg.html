@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epic Battle Royale XL - Master Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Pretendard', sans-serif; }
+        canvas { display: block; background-color: #2d5a27; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .hud { pointer-events: auto; }
+        #minimap {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #fff;
+            border-radius: 4px;
+        }
+        .slot {
+            width: 65px;
+            height: 65px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid rgba(255,255,255,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            border-radius: 8px;
+        }
+        .slot.active { border-color: #f59e0b; background: rgba(245, 158, 11, 0.3); box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); }
+        .slot-key { font-size: 10px; opacity: 0.6; position: absolute; top: 2px; left: 4px; }
+        
+        /* Modal Style */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 40px;
+            border: 2px solid #f59e0b;
+            border-radius: 20px;
+            color: white;
+            z-index: 100;
+            width: 80%;
+            max-width: 600px;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <!-- 왼쪽 상단 게임 목록 버튼 -->
+            <div class="absolute top-5 left-5 hud z-50">
+                <a href="https://sehun1101.github.io/SerVer/GameList.html" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                    게임 목록
+                </a>
+            </div>
+
+            <!-- 안내 메시지 -->
+            <div id="action-msg" class="absolute top-1/4 left-1/2 -translate-x-1/2 text-white text-3xl font-black bg-black/60 px-10 py-4 rounded-full opacity-0 transition-all duration-500 scale-90">
+                [F] 키를 눌러 낙하하세요!
+            </div>
+
+            <!-- 상단 HUD 정보 (게임 시작 시 표시) -->
+            <div id="top-hud" class="absolute top-5 left-1/2 -translate-x-1/2 flex gap-4 hud opacity-0 transition-opacity duration-500">
+                <div class="text-white bg-black/50 p-4 rounded-xl border border-white/10 flex flex-col items-center min-w-[100px]">
+                    <div class="text-[10px] uppercase opacity-70">SURVIVORS</div>
+                    <div id="alive-count" class="text-3xl font-black">50</div>
+                </div>
+                <div class="text-white bg-black/50 p-4 rounded-xl border border-white/10 flex flex-col items-center min-w-[120px]">
+                    <div class="text-[10px] uppercase opacity-70">ZONE TIMER</div>
+                    <div id="zone-timer" class="text-3xl font-black text-blue-400">05:00</div>
+                </div>
+            </div>
+
+            <!-- 우측 상단 인벤토리 -->
+            <div id="right-hud" class="absolute top-5 right-5 flex flex-col items-end gap-3 hud opacity-0 transition-opacity duration-500">
+                <div class="bg-black/50 p-4 rounded-xl text-right w-40 border border-white/10">
+                    <div class="text-xs uppercase opacity-70 text-white font-bold">전투 기록</div>
+                    <div id="kill-count" class="text-3xl font-black text-orange-500">0 Kills</div>
+                </div>
+                
+                <div class="flex gap-2">
+                    <div id="slot-1" class="slot relative">
+                        <span class="slot-key">1</span>
+                        <span class="slot-ammo font-bold text-lg">-</span>
+                        <span class="text-[9px] opacity-70 text-center">AR<br>(AUTO)</span>
+                    </div>
+                    <div id="slot-2" class="slot relative">
+                        <span class="slot-key">2</span>
+                        <span class="slot-ammo font-bold text-lg">-</span>
+                        <span class="text-[9px] opacity-70">SHOTGUN</span>
+                    </div>
+                    <div id="slot-3" class="slot relative">
+                        <span class="slot-key">3</span>
+                        <span class="slot-ammo font-bold text-lg">-</span>
+                        <span class="text-[9px] opacity-70">PISTOL</span>
+                    </div>
+                    <div id="slot-4" class="slot relative">
+                        <span class="slot-key">4</span>
+                        <span id="medkit-count" class="slot-ammo font-bold text-lg">0</span>
+                        <span class="text-[9px] opacity-70">MEDKIT</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 하단 체력바 -->
+            <div id="bottom-hud" class="absolute bottom-8 left-1/2 -translate-x-1/2 w-[500px] hud opacity-0 transition-opacity duration-500">
+                <div class="bg-black/60 h-6 rounded-full overflow-hidden border-2 border-white/30 p-1">
+                    <div id="hp-bar" class="bg-gradient-to-r from-green-600 to-green-400 h-full w-full rounded-full transition-all duration-300"></div>
+                </div>
+                <div class="flex justify-between text-white text-[10px] mt-1 px-2 font-black italic">
+                    <span>HEALTH STATUS</span>
+                    <span id="hp-text">100 / 100</span>
+                </div>
+            </div>
+
+            <!-- 미니맵 -->
+            <canvas id="minimap" class="hud opacity-0 transition-opacity duration-500"></canvas>
+
+            <!-- 메인 오버레이 -->
+            <div id="overlay" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-white pointer-events-auto transition-opacity duration-700">
+                <div class="text-center mb-10">
+                    <h1 id="overlay-title" class="text-8xl font-black mb-2 italic uppercase text-orange-500 tracking-tighter drop-shadow-2xl">ULTIMATE SURVIVAL</h1>
+                    <div class="h-1 w-full bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
+                </div>
+                
+                <div class="flex flex-col gap-4 w-full max-w-sm">
+                    <button id="start-btn" class="group relative px-10 py-6 bg-orange-600 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(234,88,12,0.4)]">
+                        <span class="relative z-10 font-black text-3xl italic uppercase">전장 진입</span>
+                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    </button>
+                    
+                    <button id="how-to-btn" class="px-10 py-4 border-2 border-white/30 rounded-2xl font-bold hover:bg-white/10 transition-colors uppercase tracking-widest text-sm">
+                        게임 방법
+                    </button>
+                </div>
+                
+                <p id="overlay-msg" class="mt-12 text-sm font-light opacity-50 tracking-widest uppercase">3배 아이템 스폰 & AR 자동연사 업데이트 적용됨</p>
+            </div>
+
+            <!-- 게임 방법 모달 -->
+            <div id="how-to-modal" class="modal">
+                <h2 class="text-3xl font-black mb-6 text-orange-500 italic">HOW TO PLAY</h2>
+                <div class="space-y-4 text-lg">
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">이동</span>
+                        <span class="font-bold text-orange-400 text-right">W, A, S, D</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">발사 / 공격</span>
+                        <span class="font-bold text-orange-400 text-right">마우스 왼쪽 클릭 (AR은 꾹 누르기)</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">조준(방향)</span>
+                        <span class="font-bold text-orange-400 text-right">마우스 커서 위치</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">무기 교체</span>
+                        <span class="font-bold text-orange-400 text-right">숫자키 1, 2, 3</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">힐킷 사용 (+50 HP)</span>
+                        <span class="font-bold text-orange-400 text-right">숫자키 4</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/10 pb-2">
+                        <span class="text-white/60">낙하 / 아이템 획득</span>
+                        <span class="font-bold text-orange-400 text-right">자동 획득 (가까이 가면 습득)</span>
+                    </div>
+                    <div class="pt-4 text-sm text-white/40 leading-relaxed">
+                        * 맵 곳곳의 총기와 아이템을 파밍하세요.<br>
+                        * 자기장(푸른 원) 밖으로 나가면 지속적인 피해를 입습니다.<br>
+                        * 마지막까지 생존하여 치킨을 쟁취하세요!
+                    </div>
+                </div>
+                <button id="close-modal-btn" class="mt-8 w-full py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition-colors">닫기</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap');
+const mctx = minimapCanvas.getContext('2d');
+
+// 설정값 계산
+const FPS = 60;
+const MOVE_SPEED = 5.5; 
+const FIVE_MIN_DIST = MOVE_SPEED * FPS * 300; 
+const WORLD_SIZE = FIVE_MIN_DIST * 2; 
+const PLANE_SPEED = WORLD_SIZE / (FPS * 30); 
+
+const PLAYER_SIZE = 24;
+const BULLET_SPEED = 22;
+const AI_COUNT = 49; 
+const INITIAL_ZONE_RADIUS = WORLD_SIZE * 0.45;
+const ITEM_SPAWN_COUNT = 2400; // 3배 스폰
+
+let gameRunning = false;
+let player = null;
+let enemies = [];
+let bullets = [];
+let items = [];
+let particles = [];
+let camera = { x: 0, y: 0 };
+let keys = {};
+let mouse = { x: 0, y: 0, isDown: false };
+let killCount = 0;
+let gameStartTime = 0;
+
+// 자기장 상태
+let zone = { 
+    x: WORLD_SIZE / 2, 
+    y: WORLD_SIZE / 2, 
+    radius: INITIAL_ZONE_RADIUS, 
+    targetRadius: INITIAL_ZONE_RADIUS,
+    isShrinking: false
+};
+
+const WEAPONS = {
+    Fist: { id: 0, name: '주먹', damage: 15, cooldown: 400, range: 50, type: 'melee', auto: false },
+    AR: { id: 1, name: 'Rifle', damage: 25, cooldown: 120, ammoPerPick: 30, color: '#444', type: 'ranged', icon: 'L', auto: true },
+    Shotgun: { id: 2, name: 'Shotgun', damage: 15, cooldown: 900, ammoPerPick: 5, pellets: 8, color: '#222', type: 'ranged', icon: 'S', auto: false },
+    Pistol: { id: 3, name: 'Pistol', damage: 18, cooldown: 250, ammoPerPick: 15, color: '#aaa', type: 'ranged', icon: 'P', auto: false }
+};
+
+class Entity {
+    constructor(x, y, color, isAI = false) {
+        this.x = x; this.y = y;
+        this.size = PLAYER_SIZE;
+        this.color = color;
+        this.hp = 100;
+        this.speed = MOVE_SPEED;
+        this.angle = Math.random() * Math.PI * 2;
+        this.isAI = isAI;
+        this.inPlane = true;
+        this.isFalling = true;
+        this.altitude = 150;
+        this.inventory = { 1: { owned: false, ammo: 0 }, 2: { owned: false, ammo: 0 }, 3: { owned: false, ammo: 0 }, 4: { medkits: 0 } };
+        this.currentSlot = 0;
+        this.weapon = WEAPONS.Fist;
+        this.lastShot = 0;
+        this.aiState = 'idle';
+        this.decisionTimer = 0;
+    }
+
+    draw() {
+        if (this.inPlane) return;
+        const screenX = this.x - camera.x;
+        const screenY = this.y - camera.y;
+        if (screenX < -100 || screenX > canvas.width + 100 || screenY < -100 || screenY > canvas.height + 100) return;
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        
+        if (this.isFalling) {
+            const s = 1 + (this.altitude / 100);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath(); ctx.ellipse(0, 30, this.size*s, this.size*0.5*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.scale(s, s);
+            ctx.fillStyle = '#f3f4f6';
+            ctx.beginPath(); ctx.arc(0, -20, 40, Math.PI, 0); ctx.fill();
+        }
+
+        ctx.rotate(this.angle);
+        ctx.fillStyle = this.color;
+        ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.stroke();
+
+        if (!this.isFalling) {
+            ctx.fillStyle = '#111';
+            if (this.weapon.type === 'ranged') {
+                ctx.fillRect(this.size - 5, -6, 26, 12);
+            } else {
+                ctx.beginPath(); ctx.arc(this.size, -12, 7, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(this.size, 12, 7, 0, Math.PI*2); ctx.fill();
+            }
+        }
+        ctx.restore();
+
+        if (this.hp < 100 && !this.isFalling) {
+            ctx.fillStyle = '#000'; ctx.fillRect(screenX-25, screenY-45, 50, 10);
+            ctx.fillStyle = this.hp > 30 ? '#22c55e' : '#ef4444';
+            ctx.fillRect(screenX-23, screenY-43, 46 * (this.hp/100), 6);
+        }
+    }
+}
+
+let plane = { active: false, x: 0, y: 0, angle: 0, speed: PLANE_SPEED };
+
+function initGame() {
+    const startPoint = Math.random() * WORLD_SIZE;
+    const side = Math.floor(Math.random() * 4);
+    if(side === 0) { plane.x = 0; plane.y = startPoint; plane.tx = WORLD_SIZE; plane.ty = WORLD_SIZE - startPoint; }
+    else if(side === 1) { plane.x = WORLD_SIZE; plane.y = startPoint; plane.tx = 0; plane.ty = WORLD_SIZE - startPoint; }
+    else if(side === 2) { plane.x = startPoint; plane.y = 0; plane.tx = WORLD_SIZE - startPoint; plane.ty = WORLD_SIZE; }
+    else { plane.x = startPoint; plane.y = WORLD_SIZE; plane.tx = WORLD_SIZE - startPoint; plane.ty = 0; }
+    
+    plane.angle = Math.atan2(plane.ty - plane.y, plane.tx - plane.x);
+    plane.active = true;
+
+    player = new Entity(plane.x, plane.y, '#3b82f6', false);
+    enemies = []; bullets = []; items = []; particles = [];
+    killCount = 0;
+    gameStartTime = Date.now();
+    
+    zone.radius = INITIAL_ZONE_RADIUS;
+    zone.targetRadius = INITIAL_ZONE_RADIUS;
+    zone.isShrinking = false;
+
+    for (let i = 0; i < AI_COUNT; i++) {
+        let en = new Entity(plane.x, plane.y, '#ef4444', true);
+        en.dropTimer = 60 + Math.random() * (FPS * 25);
+        enemies.push(en);
+    }
+
+    for (let i = 0; i < ITEM_SPAWN_COUNT; i++) spawnItem(null, null);
+    
+    // HUD 활성화
+    ['top-hud', 'right-hud', 'bottom-hud', 'minimap'].forEach(id => {
+        document.getElementById(id).classList.remove('opacity-0');
+    });
+    
+    updateUI();
+}
+
+function spawnItem(x, y, type = null) {
+    const types = ['AR', 'Shotgun', 'Pistol', 'Medkit'];
+    const chosenType = type || types[Math.floor(Math.random() * types.length)];
+    items.push({
+        id: Math.random().toString(36).substr(2, 9),
+        x: x !== null ? x : Math.random() * WORLD_SIZE,
+        y: y !== null ? y : Math.random() * WORLD_SIZE,
+        type: chosenType,
+        icon: chosenType === 'Medkit' ? '+' : WEAPONS[chosenType].icon,
+        color: chosenType === 'Medkit' ? '#fff' : '#f59e0b'
+    });
+}
+
+function update() {
+    if (!gameRunning) return;
+
+    const currentTime = Date.now();
+    const elapsedSec = (currentTime - gameStartTime) / 1000;
+    const totalGameSec = 30 * 60; 
+    
+    const phase = Math.floor(elapsedSec / 300);
+    const timeLeftInPhase = 300 - (elapsedSec % 300);
+    
+    if (elapsedSec < totalGameSec) {
+        document.getElementById('zone-timer').innerText = 
+            `${String(Math.floor(timeLeftInPhase/60)).padStart(2,'0')}:${String(Math.floor(timeLeftInPhase%60)).padStart(2,'0')}`;
+        
+        if (timeLeftInPhase < 60 && !zone.isShrinking) {
+            zone.isShrinking = true;
+            zone.targetRadius = INITIAL_ZONE_RADIUS * (1 - (phase + 1) * 0.16);
+            if (zone.targetRadius < 0) zone.targetRadius = 0;
+        } else if (timeLeftInPhase >= 60) {
+            zone.isShrinking = false;
+        }
+
+        if (zone.isShrinking && zone.radius > zone.targetRadius) {
+            zone.radius -= (6.5 / 60); 
+        }
+    } else {
+        zone.radius = 0;
+        document.getElementById('zone-timer').innerText = "00:00";
+    }
+
+    if (plane.active) {
+        plane.x += Math.cos(plane.angle) * plane.speed;
+        plane.y += Math.sin(plane.angle) * plane.speed;
+        if (player.inPlane) {
+            player.x = plane.x; player.y = plane.y;
+            const msg = document.getElementById('action-msg');
+            msg.style.opacity = "1";
+            if (keys['f']) { player.inPlane = false; msg.style.opacity = "0"; }
+        }
+        enemies.forEach(en => {
+            if (en.inPlane) {
+                en.x = plane.x; en.y = plane.y;
+                en.dropTimer--;
+                if (en.dropTimer <= 0) en.inPlane = false;
+            }
+        });
+        if (plane.x < -1000 || plane.x > WORLD_SIZE+1000 || plane.y < -1000 || plane.y > WORLD_SIZE+1000) plane.active = false;
+    }
+
+    const processEntity = (ent) => {
+        if (ent.inPlane) return;
+        
+        if (ent.isFalling) {
+            ent.altitude -= 0.3;
+            if (ent.altitude <= 0) { ent.isFalling = false; ent.altitude = 0; }
+            let ms = ent.speed * 2.5; 
+            if (!ent.isAI) {
+                let dx=0, dy=0;
+                if(keys['w']) dy--; if(keys['s']) dy++; if(keys['a']) dx--; if(keys['d']) dx++;
+                if(dx!==0||dy!==0) { let m=Math.hypot(dx,dy); ent.x+=(dx/m)*ms; ent.y+=(dy/m)*ms; }
+            } else {
+                ent.x += Math.cos(ent.angle) * ms; ent.y += Math.sin(ent.angle) * ms;
+            }
+        } else {
+            if (!ent.isAI) {
+                let dx=0, dy=0;
+                if(keys['w']) dy--; if(keys['s']) dy++; if(keys['a']) dx--; if(keys['d']) dx++;
+                if(dx!==0||dy!==0) { let m=Math.hypot(dx,dy); ent.x+=(dx/m)*ent.speed; ent.y+=(dy/m)*ent.speed; }
+                ent.angle = Math.atan2(mouse.y - canvas.height/2, mouse.x - canvas.width/2);
+                
+                if (mouse.isDown && ent.weapon.auto) {
+                    shoot(ent);
+                }
+            } else {
+                updateAILogic(ent);
+                ent.x += Math.cos(ent.angle) * (ent.speed * 0.9);
+                ent.y += Math.sin(ent.angle) * (ent.speed * 0.9);
+            }
+        }
+        ent.x = Math.max(0, Math.min(WORLD_SIZE, ent.x));
+        ent.y = Math.max(0, Math.min(WORLD_SIZE, ent.y));
+
+        if (!ent.isFalling) {
+            items = items.filter(it => {
+                if (Math.hypot(ent.x - it.x, ent.y - it.y) < ent.size + 20) {
+                    if (it.type === 'Medkit') {
+                        ent.inventory[4].medkits++;
+                    } else {
+                        const w = WEAPONS[it.type];
+                        ent.inventory[w.id].owned = true;
+                        ent.inventory[w.id].ammo += w.ammoPerPick;
+                        if (ent.weapon.id === 0) {
+                            if (!ent.isAI) switchSlot(w.id);
+                            else { ent.currentSlot = w.id; ent.weapon = w; }
+                        }
+                    }
+                    if (!ent.isAI) updateUI();
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        if (!ent.isFalling && Math.hypot(ent.x-zone.x, ent.y-zone.y) > zone.radius) {
+            ent.hp -= (0.1 + (phase * 0.2)); 
+        }
+    };
+
+    if (player) {
+        processEntity(player);
+        camera.x = player.x - canvas.width/2; camera.y = player.y - canvas.height/2;
+    }
+    enemies.forEach(processEntity);
+
+    bullets = bullets.filter(b => {
+        b.x += Math.cos(b.angle) * BULLET_SPEED; b.y += Math.sin(b.angle) * BULLET_SPEED;
+        b.life--;
+        if (b.owner !== player && !player.isFalling && Math.hypot(player.x-b.x, player.y-b.y) < player.size) {
+            player.hp -= b.damage; createParticles(b.x, b.y, '#f00'); return false;
+        }
+        for (let en of enemies) {
+            if (b.owner !== en && !en.isFalling && Math.hypot(en.x-b.x, en.y-b.y) < en.size) {
+                en.hp -= b.damage; createParticles(b.x, b.y, '#f00');
+                if (en.hp <= 0 && b.owner === player) { killCount++; updateUI(); }
+                return false;
+            }
+        }
+        return b.life > 0;
+    });
+
+    enemies.forEach(en => {
+        if (en.hp <= 0) {
+            [1,2,3].forEach(id => {
+                if(en.inventory[id].owned) spawnItem(en.x + (Math.random()-0.5)*60, en.y + (Math.random()-0.5)*60, Object.keys(WEAPONS).find(k => WEAPONS[k].id === id));
+            });
+            if(en.inventory[4].medkits > 0) spawnItem(en.x, en.y, 'Medkit');
+        }
+    });
+
+    enemies = enemies.filter(en => en.hp > 0);
+    const aliveTotal = enemies.length + (player.hp > 0 ? 1 : 0);
+    document.getElementById('alive-count').innerText = aliveTotal;
+    
+    if (player.hp <= 0) endGame(false);
+    if (enemies.length === 0 && !player.isFalling && !player.inPlane) endGame(true);
+
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.alpha -= 0.02; });
+    particles = particles.filter(p => p.alpha > 0);
+}
+
+function updateAILogic(en) {
+    en.decisionTimer--;
+    const distToZone = Math.hypot(en.x - zone.x, en.y - zone.y);
+    if (distToZone > zone.radius * 0.75) {
+        en.angle = Math.atan2(zone.y - en.y, zone.x - en.x);
+        if (en.hp < 60 && en.inventory[4].medkits > 0) {
+            en.hp = Math.min(100, en.hp + 50); en.inventory[4].medkits--;
+        }
+        return;
+    }
+
+    if (en.decisionTimer <= 0) {
+        en.decisionTimer = 40 + Math.random() * 40;
+        let targets = [player, ...enemies.filter(e => e !== en)];
+        let closestT = null; let minDist = 800;
+        targets.forEach(t => {
+            if (t.hp > 0 && !t.isFalling && !t.inPlane) {
+                const d = Math.hypot(en.x - t.x, en.y - t.y);
+                if (d < minDist) { minDist = d; closestT = t; }
+            }
+        });
+        en.target = closestT;
+
+        if (!en.target || en.hp < 50 || en.weapon.id === 0) {
+            en.aiState = 'looting';
+            let closestI = null; let minIDist = 1200;
+            items.forEach(it => {
+                const d = Math.hypot(en.x - it.x, en.y - it.y);
+                if (d < minIDist) { minIDist = d; closestI = it; }
+            });
+            en.targetItem = closestI;
+        } else {
+            en.aiState = 'combat';
+        }
+    }
+
+    if (en.aiState === 'combat' && en.target) {
+        const d = Math.hypot(en.x - en.target.x, en.y - en.target.y);
+        en.angle = Math.atan2(en.target.y - en.y, en.target.x - en.x);
+        if (en.weapon.type === 'ranged' && en.inventory[en.weapon.id].ammo > 0) {
+            if (d < 600) shoot(en);
+        } else if (d < en.weapon.range + 15) melee(en);
+    } else if (en.aiState === 'looting' && en.targetItem) {
+        en.angle = Math.atan2(en.targetItem.y - en.y, en.targetItem.x - en.x);
+    }
+}
+
+function switchSlot(id) {
+    if (!player) return;
+    player.currentSlot = id;
+    const key = Object.keys(WEAPONS).find(k => WEAPONS[k].id === id);
+    player.weapon = player.inventory[id].owned ? WEAPONS[key] : WEAPONS.Fist;
+    updateUI();
+}
+
+function shoot(ent) {
+    if (ent.weapon.type !== 'ranged') return;
+    const now = Date.now();
+    if (now - ent.lastShot < ent.weapon.cooldown) return;
+    const inv = ent.inventory[ent.weapon.id];
+    if (inv.ammo <= 0) return;
+    ent.lastShot = now; inv.ammo--;
+    
+    const pellets = ent.weapon.pellets || 1;
+    for (let i = 0; i < pellets; i++) {
+        const spread = (ent.weapon.id === 1 ? 0.05 : 0.18);
+        const s = (Math.random()-0.5) * spread;
+        bullets.push({
+            x: ent.x + Math.cos(ent.angle)*28, y: ent.y + Math.sin(ent.angle)*28,
+            angle: ent.angle + s, damage: ent.weapon.damage, owner: ent, life: 80
+        });
+    }
+    if (!ent.isAI) updateUI();
+}
+
+function melee(ent) {
+    const now = Date.now();
+    if (now - ent.lastShot < ent.weapon.cooldown) return;
+    ent.lastShot = now;
+    [player, ...enemies].forEach(t => {
+        if (t !== ent && Math.hypot(ent.x - t.x, ent.y - t.y) < ent.weapon.range + 20) {
+            t.hp -= ent.weapon.damage; createParticles(t.x, t.y, '#f00');
+            if (t.hp <= 0 && ent === player) { killCount++; updateUI(); }
+        }
+    });
+}
+
+function useMedkit() {
+    if (player && player.inventory[4].medkits > 0 && player.hp < 100) {
+        player.hp = Math.min(100, player.hp + 50); player.inventory[4].medkits--;
+        createParticles(player.x, player.y, '#22c55e'); updateUI();
+    }
+}
+
+function createParticles(x, y, color) {
+    for (let i=0; i<8; i++) particles.push({ x, y, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8, alpha:1, color });
+}
+
+function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const cx=camera.x, cy=camera.y;
+
+    ctx.fillStyle = '#2d5a27'; ctx.fillRect(0,0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    const startX = Math.floor(cx / 200) * 200;
+    const startY = Math.floor(cy / 200) * 200;
+    for(let x=startX; x<=startX+canvas.width+200; x+=200) { ctx.moveTo(x-cx,0); ctx.lineTo(x-cx,canvas.height); }
+    for(let y=startY; y<=startY+canvas.height+200; y+=200) { ctx.moveTo(0,y-cy); ctx.lineTo(canvas.width,y-cy); }
+    ctx.stroke();
+
+    items.forEach(it => {
+        if (it.x > cx-50 && it.x < cx+canvas.width+50 && it.y > cy-50 && it.y < cy+canvas.height+50) {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(it.x-cx-18, it.y-cy-18, 36, 36);
+            ctx.strokeStyle = it.color; ctx.lineWidth = 2; ctx.strokeRect(it.x-cx-18, it.y-cy-18, 36, 36);
+            ctx.fillStyle = it.color; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.fillText(it.icon, it.x-cx, it.y-cy+7);
+        }
+    });
+
+    if (player) player.draw();
+    enemies.forEach(en => en.draw());
+    bullets.forEach(b => { 
+        if (b.x > cx && b.x < cx+canvas.width && b.y > cy && b.y < cy+canvas.height) {
+            ctx.fillStyle='#fbbf24'; ctx.beginPath(); ctx.arc(b.x-cx,b.y-cy,5,0,Math.PI*2); ctx.fill(); 
+        }
+    });
+
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)'; ctx.lineWidth = 30;
+    ctx.beginPath(); ctx.arc(zone.x-cx, zone.y-cy, zone.radius, 0, Math.PI*2); ctx.stroke();
+    
+    if (plane.active) {
+        ctx.save(); ctx.translate(plane.x-cx, plane.y-cy); ctx.rotate(plane.angle);
+        ctx.fillStyle = '#64748b'; ctx.fillRect(-120, -40, 240, 80); ctx.fillRect(-40, -180, 80, 360); ctx.restore();
+    }
+
+    particles.forEach(p => { ctx.globalAlpha=p.alpha; ctx.fillStyle=p.color; ctx.fillRect(p.x-cx,p.y-cy,6,6); });
+    ctx.globalAlpha = 1;
+    drawMinimap();
+}
+
+function drawMinimap() {
+    mctx.clearRect(0,0,200,200);
+    const s = 200/WORLD_SIZE;
+    mctx.fillStyle = 'rgba(0,0,0,0.6)'; mctx.fillRect(0,0,200,200);
+    mctx.strokeStyle = '#3b82f6'; mctx.lineWidth=2;
+    mctx.beginPath(); mctx.arc(zone.x*s, zone.y*s, zone.radius*s, 0, Math.PI*2); mctx.stroke();
+    if (player && !player.inPlane) {
+        mctx.fillStyle = '#3b82f6'; mctx.beginPath(); mctx.arc(player.x*s, player.y*s, 5, 0, Math.PI*2); mctx.fill();
+    }
+}
+
+function updateUI() {
+    if (!player) return;
+    const hpPercent = Math.max(0, player.hp);
+    document.getElementById('hp-bar').style.width = hpPercent + '%';
+    document.getElementById('hp-text').innerText = `${Math.ceil(hpPercent)} / 100`;
+    document.getElementById('kill-count').innerText = `${killCount} Kills`;
+    document.getElementById('medkit-count').innerText = player.inventory[4].medkits;
+    
+    for (let i=1; i<=3; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        slot.classList.toggle('active', player.currentSlot === i);
+        const inv = player.inventory[i];
+        slot.querySelector('.slot-ammo').innerText = inv.owned ? inv.ammo : '-';
+        slot.style.opacity = inv.owned ? "1" : "0.3";
+    }
+}
+
+function endGame(win) {
+    gameRunning = false;
+    document.getElementById('overlay').classList.remove('opacity-0', 'pointer-events-none');
+    const title = document.getElementById('overlay-title');
+    title.innerText = win ? "CHICKEN DINNER!" : "ELIMINATED";
+    title.className = win ? "text-8xl font-black mb-2 italic uppercase text-yellow-400" : "text-8xl font-black mb-2 italic uppercase text-red-600";
+    document.getElementById('start-btn').querySelector('span').innerText = "다시 시도";
+}
+
+// Event Listeners
+window.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (['1','2','3'].includes(e.key)) switchSlot(parseInt(e.key));
+    if (e.key === '4') useMedkit();
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('mousedown', () => {
+    mouse.isDown = true;
+    if (gameRunning && player && !player.inPlane && !player.isFalling) {
+        if (!player.weapon.auto) {
+            if (player.weapon.type === 'ranged') shoot(player); else melee(player);
+        }
+    }
+});
+window.addEventListener('mouseup', () => mouse.isDown = false);
+
+// UI Buttons
+document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('overlay').classList.add('opacity-0', 'pointer-events-none');
+    initGame();
+    gameRunning = true;
+});
+
+document.getElementById('how-to-btn').addEventListener('click', () => {
+    document.getElementById('how-to-modal').style.display = 'block';
+});
+
+document.getElementById('close-modal-btn').addEventListener('click', () => {
+    document.getElementById('how-to-modal').style.display = 'none';
+});
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+function res() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', res);
+res(); loop();
+</script>
+</body>
+</html>
