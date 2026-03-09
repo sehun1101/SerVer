@@ -3,50 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survival: Elite Arsenal</title>
+    <title>Survival: Safe Zone Defense</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background-color: #444; font-family: 'Courier New', monospace; }
         canvas { display: block; cursor: crosshair; }
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; padding: 20px; color: #ff4444; text-shadow: 2px 2px 4px #000;
+            pointer-events: none; padding: 20px; color: #fff; text-shadow: 2px 2px 4px #000;
         }
         .weapon-slot {
-            width: 45px; height: 45px; border: 1px solid #444; display: flex; 
+            width: 45px; height: 45px; border: 2px solid #222; display: flex; 
             align-items: center; justify-content: center; font-size: 14px;
-            background: rgba(0,0,0,0.5); margin-right: 5px; color: #666; font-weight: bold;
+            background: rgba(0,0,0,0.7); margin-right: 5px; color: #555; font-weight: bold;
         }
-        .weapon-slot.active { border-color: #2ecc71; color: #2ecc71; background: rgba(46, 204, 113, 0.2); box-shadow: 0 0 10px rgba(46, 204, 113, 0.5); }
-        .weapon-slot.unlocked { color: #fff; border-color: #fff; }
+        .weapon-slot.active { border-color: #2ecc71; color: #2ecc71; background: rgba(46, 204, 113, 0.3); }
+        .weapon-slot.unlocked { color: #fff; border-color: #aaa; }
+        #horde-timer {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -120%);
+            font-size: 4rem; font-weight: 900; color: #ff4444; opacity: 0; transition: opacity 0.5s;
+        }
     </style>
 </head>
 <body>
 
     <div id="ui-layer">
+        <div id="horde-timer">HORDE: 30s</div>
         <div class="flex justify-between items-start">
             <div>
-                <h1 class="text-3xl font-bold uppercase tracking-tighter text-red-700">ELITE ARSENAL</h1>
-                <p id="team-kills" class="text-xl text-yellow-500 font-bold">Team Kills: 0</p>
-                <p id="next-unlock" class="text-sm text-gray-400">Next Unlock: 100 Kills</p>
-                <div class="flex mt-2" id="weapon-inventory">
-                    <!-- Slots 1-8, 0 -->
-                </div>
+                <h1 class="text-3xl font-bold uppercase tracking-tighter text-green-500">SAFE ZONE DEFENSE</h1>
+                <p id="team-kills" class="text-xl text-yellow-400 font-bold">Team Kills: 0</p>
+                <div class="flex mt-2" id="weapon-inventory"></div>
             </div>
             <div class="text-right">
-                <div class="w-48 h-4 bg-gray-900 border border-red-900 mb-1">
-                    <div id="hp-bar-fill" class="h-full bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]" style="width: 100%;"></div>
+                <div class="w-48 h-4 bg-black border border-white mb-1">
+                    <div id="hp-bar-fill" class="h-full bg-red-600" style="width: 100%;"></div>
                 </div>
-                <p id="player-hp-text" class="text-xs text-white mb-2">HP: 1000 / 1000</p>
+                <p id="player-hp-text" class="text-xs mb-2">HP: 1000 / 1000</p>
                 <p id="ammo-count" class="text-2xl italic font-black text-green-400">AMMO: INF</p>
                 <p id="weapon-name" class="text-sm font-bold text-gray-300">권총</p>
-                <p id="status-msg" class="text-sm italic text-yellow-500 font-bold"></p>
+                <p id="status-msg" class="text-lg italic text-yellow-400 font-bold"></p>
             </div>
         </div>
 
-        <div id="death-screen" class="hidden absolute inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center pointer-events-auto">
-            <h2 class="text-7xl font-black mb-4 text-red-600">MISSION FAILED</h2>
-            <button onclick="location.reload()" class="px-10 py-4 bg-red-700 text-white font-bold hover:bg-red-600 border-2 border-red-500">REDEPLOY</button>
+        <div id="death-screen" class="hidden absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center pointer-events-auto">
+            <h2 class="text-7xl font-black mb-4 text-red-600">OVERRUN</h2>
+            <button onclick="location.reload()" class="px-10 py-4 bg-green-700 text-white font-bold hover:bg-green-600 border-2 border-green-400">RESTART</button>
         </div>
     </div>
 
@@ -60,28 +62,24 @@
         const ammoDisplay = document.getElementById('ammo-count');
         const weaponNameDisplay = document.getElementById('weapon-name');
         const teamKillsDisplay = document.getElementById('team-kills');
-        const nextUnlockDisplay = document.getElementById('next-unlock');
         const weaponInventory = document.getElementById('weapon-inventory');
         const statusMsg = document.getElementById('status-msg');
+        const hordeTimerUI = document.getElementById('horde-timer');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        const WORLD_WIDTH = 50000;
-        const ZOMBIE_ATTACK_COOLDOWN = 600;
-
-        // 플레이어 전용 무기 데이터
+        // 플레이어 무기 설정
         const PLAYER_WEAPONS = [
             { id: 1, name: "권총", fireRate: 350, damage: 14, bulletSpeed: 16, color: '#fff', range: 500, unlockKills: 0, auto: false },
             { id: 2, name: "기관단총", fireRate: 150, damage: 12, bulletSpeed: 18, color: '#3498db', range: 450, unlockKills: 100, auto: true },
             { id: 3, name: "돌격소총", fireRate: 220, damage: 18, bulletSpeed: 20, color: '#e67e22', range: 600, unlockKills: 250, auto: true },
-            { id: 4, name: "자동권총x2", fireRate: 100, damage: 13, bulletSpeed: 17, color: '#95a5a6', range: 500, unlockKills: 400, auto: true, dual: true },
-            { id: 5, name: "자동 산탄총", fireRate: 330, damage: 8.2, bulletSpeed: 15, color: '#f39c12', range: 400, unlockKills: 600, auto: true, pellets: 12 },
+            { id: 4, name: "자동권총x2", fireRate: 100, damage: 13, bulletSpeed: 17, color: '#bdc3c7', range: 500, unlockKills: 400, auto: true, dual: true },
+            { id: 5, name: "자동 산탄총", fireRate: 330, damage: 8.5, bulletSpeed: 15, color: '#f39c12', range: 400, unlockKills: 600, auto: true, pellets: 12 },
             { id: 6, name: "기관총", fireRate: 120, damage: 20, bulletSpeed: 22, color: '#e74c3c', range: 700, unlockKills: 1000, auto: true },
             { id: 7, name: "바주카포", fireRate: 1500, damage: 100, bulletSpeed: 12, color: '#f1c40f', range: 800, unlockKills: 1500, auto: false, explosive: 100 },
             { id: 8, name: "레이저총", fireRate: 50, damage: 25, color: '#00ffff', range: 1000, unlockKills: 2500, auto: true, isLaser: true },
-            { id: 9, name: "자동발사기", unlockKills: 3500, isDrone: true },
-            { id: 0, name: "매혹총", fireRate: 100, damage: 0, color: '#ff69b4', range: 600, unlockKills: 0, auto: true, charm: true }
+            { id: 0, name: "매혹총", fireRate: 100, damage: 0, color: '#ffec3d', range: 600, unlockKills: 0, auto: true, charm: true }
         ];
 
         const game = {
@@ -91,12 +89,17 @@
             isMouseDown: false,
             cameraX: 0,
             teamKills: 0,
-            weaponIndex: 0, // PLAYER_WEAPONS 리스트의 인덱스
-            drones: []
+            hordeActive: false,
+            hordeTimeLeft: 0,
+            safeZones: [
+                { x: 5000, w: 1200, activated: false },
+                { x: 15000, w: 1200, activated: false },
+                { x: 30000, w: 1500, activated: false }
+            ]
         };
 
         const player = {
-            x: 500, y: canvas.height / 2, radius: 20, color: '#2ecc71', speed: 5.5,
+            x: 600, y: canvas.height / 2, radius: 20, color: '#2ecc71', speed: 5.5,
             hp: 1000, maxHp: 1000, lastShot: 0, weapon: PLAYER_WEAPONS[0], lastDamageTime: 0
         };
 
@@ -106,10 +109,9 @@
         const zombies = [];
         const charmedZombies = [];
 
-        // 인벤토리 UI 초기화
         function initInventoryUI() {
             weaponInventory.innerHTML = '';
-            PLAYER_WEAPONS.forEach((w, idx) => {
+            PLAYER_WEAPONS.sort((a,b)=> (a.id===0?10:a.id)-(b.id===0?10:b.id)).forEach((w) => {
                 const slot = document.createElement('div');
                 slot.className = 'weapon-slot';
                 slot.id = `slot-${w.id}`;
@@ -130,19 +132,6 @@
                     slot.classList.remove('unlocked', 'active');
                 }
             });
-
-            const nextW = PLAYER_WEAPONS.slice().sort((a,b)=>a.unlockKills-b.unlockKills).find(w => w.unlockKills > game.teamKills);
-            if (nextW) {
-                nextUnlockDisplay.textContent = `Next: ${nextW.name} (${nextW.unlockKills} Kills)`;
-            } else {
-                nextUnlockDisplay.textContent = `God Status Achieved!`;
-            }
-
-            // 드론 활성화 체크
-            if (game.teamKills >= 3500 && game.drones.length === 0) {
-                for(let i=0; i<4; i++) game.drones.push({ angle: (Math.PI*2/4)*i, lastShot: 0 });
-                showMessage("드론 자동발사기 활성화!");
-            }
         }
 
         class Entity {
@@ -152,46 +141,37 @@
             }
             draw() {
                 const sx = this.x - game.cameraX;
-                if (sx < -100 || sx > canvas.width + 100) return false;
+                if (sx < -200 || sx > canvas.width + 200) return false;
                 ctx.beginPath();
                 ctx.arc(sx, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color;
                 ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
                 return true;
             }
         }
 
         class SurvivorAI extends Entity {
             constructor(x, y, type = 'SURVIVOR') {
-                super(x, y, 16, type === 'MILITARY' ? '#27ae60' : '#3498db');
+                super(x, y, 16, type === 'MILITARY' ? '#1b5e20' : '#0277bd');
                 this.type = type;
-                this.speed = 3.5 + Math.random();
+                this.speed = 3.8;
                 this.lastShot = 0;
-                // 군인 무기 설정 (SMG, AR, RIFLE)
-                const milPool = [
-                    { name: "SMG", fireRate: 150, damage: 12, bulletSpeed: 18, color: '#3498db', range: 450, ammo: 35, reload: 2500 },
-                    { name: "AR", fireRate: 220, damage: 18, bulletSpeed: 20, color: '#e67e22', range: 600, ammo: 40, reload: 3500 },
-                    { name: "RIFLE", fireRate: 800, damage: 65, bulletSpeed: 26, color: '#bdc3c7', range: 900, ammo: 15, reload: 4500 }
-                ];
-                this.weapon = milPool[Math.floor(Math.random() * milPool.length)];
-                this.ammo = this.weapon.ammo;
-                this.reloading = false;
-                this.offset = { x: (Math.random()-0.5)*180, y: (Math.random()-0.5)*180 };
+                this.weapon = { name: "AR", fireRate: 250, damage: 15, bulletSpeed: 18, color: '#ddd', range: 500 };
+                this.offset = { x: (Math.random()-0.5)*200, y: (Math.random()-0.5)*200 };
             }
             update() {
                 const target = this.findNearest();
-                if (target && Math.hypot(target.x-this.x, target.y-this.y) < this.weapon.range && !this.reloading) {
+                if (target && Math.hypot(target.x-this.x, target.y-this.y) < this.weapon.range) {
                     this.shoot(target);
                 }
-                if (this.type === 'SURVIVOR') {
-                    const tx = player.x + this.offset.x;
-                    const ty = player.y + this.offset.y;
-                    const d = Math.hypot(tx - this.x, ty - this.y);
-                    if (d > 70) {
-                        const angle = Math.atan2(ty - this.y, tx - this.x);
-                        this.x += Math.cos(angle) * this.speed;
-                        this.y += Math.sin(angle) * this.speed;
-                    }
+                const tx = player.x + this.offset.x;
+                const ty = player.y + this.offset.y;
+                const d = Math.hypot(tx - this.x, ty - this.y);
+                if (d > 80) {
+                    const angle = Math.atan2(ty - this.y, tx - this.x);
+                    this.x += Math.cos(angle) * this.speed;
+                    this.y += Math.sin(angle) * this.speed;
                 }
             }
             findNearest() {
@@ -206,12 +186,7 @@
                 if (Date.now() - this.lastShot > this.weapon.fireRate) {
                     const angle = Math.atan2(z.y - this.y, z.x - this.x);
                     bullets.push(new Bullet(this.x, this.y, angle, true, this.weapon));
-                    this.ammo--;
                     this.lastShot = Date.now();
-                    if (this.ammo <= 0) {
-                        this.reloading = true;
-                        setTimeout(() => { this.ammo = this.weapon.ammo; this.reloading = false; }, this.weapon.reload);
-                    }
                 }
             }
         }
@@ -231,63 +206,59 @@
             draw() {
                 const sx = this.x - game.cameraX;
                 ctx.strokeStyle = this.color;
-                ctx.lineWidth = this.explosive ? 6 : 3;
+                ctx.lineWidth = this.explosive ? 8 : 4;
                 ctx.beginPath(); ctx.moveTo(sx, this.y); 
                 ctx.lineTo(sx - this.vel.x*0.3, this.y - this.vel.y*0.3); ctx.stroke();
             }
         }
 
         class Zombie extends Entity {
-            constructor(type = 'NORMAL') {
-                const side = Math.random() > 0.5 ? 1 : -1;
-                super(game.cameraX + (side === 1 ? canvas.width + 100 : -100), Math.random() * canvas.height, type === 'NORMAL' ? 16 : 22, type === 'NORMAL' ? '#8b0000' : '#4a0000');
+            constructor(type = 'NORMAL', spawnPos = null) {
+                let x, y;
+                if (spawnPos) {
+                    x = spawnPos.x; y = spawnPos.y;
+                } else {
+                    const side = Math.random() > 0.5 ? 1 : -1;
+                    x = game.cameraX + (side === 1 ? canvas.width + 100 : -100);
+                    y = Math.random() * canvas.height;
+                }
+                super(x, y, type === 'NORMAL' ? 16 : 22, type === 'NORMAL' ? '#8b0000' : '#4a0000');
                 this.type = type;
-                this.speed = (type === 'NORMAL' ? 1.5 : 1.2) + Math.random() * 2;
+                this.speed = (type === 'NORMAL' ? 1.8 : 1.4) + Math.random() * 1.5;
                 this.hp = type === 'NORMAL' ? (10 + Math.random()*10) : (20 + Math.random()*20);
                 this.maxHp = this.hp;
                 this.atk = type === 'NORMAL' ? 10 : 20;
                 this.charmed = false;
-                this.target = null;
             }
             update() {
                 if (this.charmed) {
-                    // 매혹된 좀비: 다른 좀비 공격 혹은 플레이어 호위
-                    let enemy = null;
-                    let minD = Infinity;
+                    let enemy = null, minD = Infinity;
                     for(let z of zombies) {
-                        if (z === this) continue;
                         const d = Math.hypot(z.x - this.x, z.y - this.y);
                         if (d < minD) { minD = d; enemy = z; }
                     }
-
-                    if (enemy && minD < 400) {
+                    if (enemy && minD < 500) {
                         const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
-                        this.x += Math.cos(angle) * (this.speed * 1.2);
-                        this.y += Math.sin(angle) * (this.speed * 1.2);
-                        if (minD < this.radius + enemy.radius) {
-                            if (Date.now() - enemy.lastDamageTime > 500) {
-                                enemy.hp -= this.atk;
-                                enemy.lastDamageTime = Date.now();
-                            }
+                        this.x += Math.cos(angle) * (this.speed * 1.3);
+                        this.y += Math.sin(angle) * (this.speed * 1.3);
+                        if (minD < this.radius + enemy.radius && Date.now() - enemy.lastDamageTime > 500) {
+                            enemy.hp -= this.atk; enemy.lastDamageTime = Date.now();
                         }
                     } else {
-                        // 플레이어 호위
-                        const angle = Date.now() * 0.001 + (zombies.indexOf(this) * 0.5);
-                        const tx = player.x + Math.cos(angle) * 120;
-                        const ty = player.y + Math.sin(angle) * 120;
+                        const angle = Date.now() * 0.001 + (charmedZombies.indexOf(this) * 0.7);
+                        const tx = player.x + Math.cos(angle) * 130;
+                        const ty = player.y + Math.sin(angle) * 130;
                         const d = Math.hypot(tx - this.x, ty - this.y);
                         if (d > 20) {
                             const a = Math.atan2(ty - this.y, tx - this.x);
-                            this.x += Math.cos(a) * this.speed;
-                            this.y += Math.sin(a) * this.speed;
+                            this.x += Math.cos(a) * this.speed; this.y += Math.sin(a) * this.speed;
                         }
                     }
                     return;
                 }
-
-                let potentialTargets = [player, ...survivors, ...militaryGuards, ...charmedZombies];
+                let targets = [player, ...survivors, ...militaryGuards, ...charmedZombies];
                 let minD = Infinity, target = player;
-                for(let t of potentialTargets) {
+                for(let t of targets) {
                     const d = Math.hypot(t.x - this.x, t.y - this.y);
                     if (d < minD) { minD = d; target = t; }
                 }
@@ -295,32 +266,21 @@
                 this.x += Math.cos(angle) * this.speed;
                 this.y += Math.sin(angle) * this.speed;
 
-                if (minD < this.radius + target.radius) {
-                    if (Date.now() - target.lastDamageTime > ZOMBIE_ATTACK_COOLDOWN) {
-                        target.hp -= this.atk;
-                        target.lastDamageTime = Date.now();
-                    }
+                if (minD < this.radius + target.radius && Date.now() - target.lastDamageTime > ZOMBIE_ATTACK_COOLDOWN) {
+                    target.hp -= this.atk; target.lastDamageTime = Date.now();
                 }
             }
             draw() {
                 if (super.draw()) {
                     const sx = this.x - game.cameraX;
-                    ctx.fillStyle = '#222'; ctx.fillRect(sx - 15, this.y - 25, 30, 3);
-                    ctx.fillStyle = this.charmed ? '#ff69b4' : '#f00'; ctx.fillRect(sx - 15, this.y - 25, 30 * (this.hp / this.maxHp), 3);
-                    if (this.type === 'BRUISER') {
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeCircle(sx, this.y, this.radius + 2);
-                    }
+                    ctx.fillStyle = '#000'; ctx.fillRect(sx - 15, this.y - 25, 30, 4);
+                    ctx.fillStyle = this.charmed ? (this.type === 'NORMAL' ? '#ffeb3b' : '#ff9800') : '#f00';
+                    ctx.fillRect(sx - 15, this.y - 25, 30 * (this.hp / this.maxHp), 4);
                 }
             }
         }
-        ctx.strokeCircle = function(x, y, r) { this.beginPath(); this.arc(x, y, r, 0, Math.PI*2); this.stroke(); }
 
-        // 초기 소환
-        for(let i=0; i<3; i++) survivors.push(new SurvivorAI(player.x - 50, player.y));
-        for(let i=0; i<3; i++) {
-            const ox = 4000 + i * 10000;
-            for(let j=0; j<10; j++) militaryGuards.push(new SurvivorAI(ox + Math.random()*500, Math.random()*canvas.height, 'MILITARY'));
-        }
+        const ZOMBIE_ATTACK_COOLDOWN = 600;
 
         function handleInput() {
             if (game.isGameOver) return;
@@ -329,11 +289,9 @@
             if (game.keys['a']) player.x -= player.speed;
             if (game.keys['d']) player.x += player.speed;
 
-            // 숫자 키 무기 변경
             for (let i = 0; i < 10; i++) {
-                const key = i.toString();
-                if (game.keys[key]) {
-                    const targetW = PLAYER_WEAPONS.find(w => w.id === parseInt(key));
+                if (game.keys[i.toString()]) {
+                    const targetW = PLAYER_WEAPONS.find(w => w.id === i);
                     if (targetW && game.teamKills >= targetW.unlockKills) {
                         player.weapon = targetW;
                         updateInventoryUI();
@@ -344,44 +302,31 @@
         }
 
         function handleShooting() {
-            if (!game.isMouseDown || game.isGameOver || player.weapon.isDrone) return;
-            
+            if (!game.isMouseDown || game.isGameOver) return;
             const now = Date.now();
             if (now - player.lastShot > player.weapon.fireRate) {
                 const angle = Math.atan2(game.mouse.y - player.y, game.mouse.x - (player.x - game.cameraX));
-                
                 if (player.weapon.isLaser) {
-                    // 레이저 효과
                     fireLaser(angle);
                 } else if (player.weapon.pellets) {
                     for(let i=0; i<player.weapon.pellets; i++) bullets.push(new Bullet(player.x, player.y, angle + (Math.random()-0.5)*0.5, true, player.weapon));
                 } else if (player.weapon.dual) {
-                    bullets.push(new Bullet(player.x, player.y - 10, angle, true, player.weapon));
-                    bullets.push(new Bullet(player.x, player.y + 10, angle, true, player.weapon));
+                    bullets.push(new Bullet(player.x, player.y - 12, angle, true, player.weapon));
+                    bullets.push(new Bullet(player.x, player.y + 12, angle, true, player.weapon));
                 } else {
                     bullets.push(new Bullet(player.x, player.y, angle, true, player.weapon));
                 }
-
                 player.lastShot = now;
-                // 수동 연사인 경우 마우스 떼기 전까지 발사 방지
                 if (!player.weapon.auto) game.isMouseDown = false; 
             }
         }
 
         function fireLaser(angle) {
             const sx = player.x - game.cameraX;
-            ctx.beginPath();
-            ctx.moveTo(sx, player.y);
             const tx = sx + Math.cos(angle) * player.weapon.range;
             const ty = player.y + Math.sin(angle) * player.weapon.range;
-            ctx.lineTo(tx, ty);
-            ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 4;
-            ctx.shadowBlur = 10; ctx.shadowColor = '#00ffff';
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-
-            // 레이저 충돌 검사
+            ctx.beginPath(); ctx.moveTo(sx, player.y); ctx.lineTo(tx, ty);
+            ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 5; ctx.stroke();
             zombies.forEach(z => {
                 const zx = z.x - game.cameraX;
                 const dist = Math.abs((ty-player.y)*zx - (tx-sx)*z.y + tx*player.y - ty*sx) / Math.hypot(ty-player.y, tx-sx);
@@ -389,8 +334,7 @@
                     z.hp -= player.weapon.damage;
                     if (z.hp <= 0) {
                         zombies.splice(zombies.indexOf(z), 1);
-                        game.teamKills++;
-                        updateInventoryUI();
+                        game.teamKills++; updateInventoryUI();
                     }
                 }
             });
@@ -402,107 +346,120 @@
             teamKillsDisplay.textContent = `Team Kills: ${game.teamKills}`;
         }
 
-        function showMessage(msg) {
-            statusMsg.textContent = msg;
-            setTimeout(() => statusMsg.textContent = "", 3000);
+        function spawnZombies() {
+            if (zombies.length < (game.hordeActive ? 150 : 80)) {
+                if (game.hordeActive) {
+                    // 호드 시 사방에서 스폰
+                    const angle = Math.random() * Math.PI * 2;
+                    const x = player.x + Math.cos(angle) * 1000;
+                    const y = player.y + Math.sin(angle) * 1000;
+                    zombies.push(new Zombie(Math.random() < 0.4 ? 'BRUISER' : 'NORMAL', {x, y}));
+                } else {
+                    if (Math.random() < 0.3) zombies.push(new Zombie('BRUISER'));
+                    else zombies.push(new Zombie('NORMAL'));
+                }
+            }
+            setTimeout(spawnZombies, game.hordeActive ? 100 : 800);
         }
 
-        function spawnZombies() {
-            if (zombies.length < 80) {
-                // 브루저는 일반 좀비보다 절반 확률
-                if (Math.random() < 0.33) zombies.push(new Zombie('BRUISER'));
-                else zombies.push(new Zombie('NORMAL'));
-            }
-            setTimeout(spawnZombies, Math.max(150, 800 - (game.teamKills/10)));
+        function checkSafeZones() {
+            game.safeZones.forEach(zone => {
+                if (!zone.activated && player.x > zone.x + 200 && player.x < zone.x + zone.w - 200) {
+                    startHorde(zone);
+                }
+            });
+        }
+
+        function startHorde(zone) {
+            zone.activated = true;
+            game.hordeActive = true;
+            game.hordeTimeLeft = 30;
+            hordeTimerUI.style.opacity = "1";
+            statusMsg.textContent = "안전지대 방어전 시작! 건물을 지키십시오!";
+            
+            const timer = setInterval(() => {
+                game.hordeTimeLeft--;
+                hordeTimerUI.textContent = `HORDE: ${game.hordeTimeLeft}s`;
+                if (game.hordeTimeLeft <= 0) {
+                    clearInterval(timer);
+                    game.hordeActive = false;
+                    hordeTimerUI.style.opacity = "0";
+                    statusMsg.textContent = "방어 성공! 다음 지역으로 이동하십시오.";
+                    // 보상으로 킬수 대폭 증가
+                    game.teamKills += 100;
+                    updateInventoryUI();
+                }
+            }, 1000);
         }
 
         function animate() {
-            ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#444'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             game.cameraX = player.x - canvas.width / 4;
+
+            // 바닥 격자 (이동감 제공)
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+            for(let x = -game.cameraX % 100; x < canvas.width; x += 100) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+
+            // 안전지대 및 건물 그리기
+            game.safeZones.forEach(zone => {
+                const sx = zone.x - game.cameraX;
+                // 연두색 바닥
+                ctx.fillStyle = 'rgba(46, 204, 113, 0.2)';
+                ctx.fillRect(sx, 0, zone.w, canvas.height);
+                ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 5;
+                ctx.strokeRect(sx, 0, zone.w, canvas.height);
+
+                // 건물 (벙커)
+                ctx.fillStyle = '#222';
+                ctx.fillRect(sx + zone.w/2 - 150, canvas.height/2 - 200, 300, 400);
+                ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 3;
+                ctx.strokeRect(sx + zone.w/2 - 150, canvas.height/2 - 200, 300, 400);
+                ctx.fillStyle = '#111';
+                ctx.fillRect(sx + zone.w/2 - 50, canvas.height/2 + 100, 100, 100); // 문
+            });
 
             handleInput();
             handleShooting();
+            checkSafeZones();
 
-            // 배경 기지 영역
-            for(let i=0; i<3; i++) {
-                ctx.fillStyle = 'rgba(39, 174, 96, 0.05)';
-                ctx.fillRect(4000 + i*10000 - game.cameraX, 0, 1500, canvas.height);
-            }
-
-            militaryGuards.forEach(g => { g.update(); g.draw(); });
             survivors.forEach(s => { s.update(); s.draw(); });
             charmedZombies.forEach((cz, idx) => {
                 cz.update();
                 if (!cz.draw() || cz.hp <= 0) charmedZombies.splice(idx, 1);
             });
 
-            // 드론 업데이트
-            if (game.drones.length > 0) {
-                game.drones.forEach(d => {
-                    d.angle += 0.03;
-                    const dx = player.x + Math.cos(d.angle) * 80;
-                    const dy = player.y + Math.sin(d.angle) * 80;
-                    
-                    // 드론 그리기
-                    const dsx = dx - game.cameraX;
-                    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(dsx, dy, 8, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = '#fff'; ctx.stroke();
-
-                    // 드론 자동 발사
-                    if (Date.now() - d.lastShot > 200) {
-                        let nearZ = null, minD = 500;
-                        zombies.forEach(z => {
-                            const dist = Math.hypot(z.x-dx, z.y-dy);
-                            if (dist < minD) { minD = dist; nearZ = z; }
-                        });
-                        if (nearZ) {
-                            const angle = Math.atan2(nearZ.y - dy, nearZ.x - dx);
-                            bullets.push(new Bullet(dx, dy, angle, true, { damage: 20, bulletSpeed: 15, color: '#2ecc71' }));
-                            d.lastShot = Date.now();
-                        }
-                    }
-                });
-            }
-
-            // 좀비 루프
             for (let i = zombies.length - 1; i >= 0; i--) {
                 const z = zombies[i];
                 z.update();
                 if (!z.draw() && Math.abs(z.x - player.x) > 3000) zombies.splice(i, 1);
             }
 
-            // 총알 루프
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const b = bullets[i];
                 b.update(); b.draw();
-                
                 let hit = false;
                 for (let j = zombies.length - 1; j >= 0; j--) {
                     const z = zombies[j];
-                    if (Math.hypot(b.x - z.x, b.y - z.y) < z.radius + 5) {
+                    if (Math.hypot(b.x - z.x, b.y - z.y) < z.radius + 8) {
                         if (b.charm) {
                             z.charmed = true;
+                            z.hp = z.type === 'NORMAL' ? 100 : 200;
+                            z.maxHp = z.hp;
+                            z.atk = z.type === 'NORMAL' ? 1 : 2;
                             charmedZombies.push(z);
                             zombies.splice(j, 1);
                             hit = true;
                         } else if (b.explosive) {
-                            // 바주카 폭발
-                            zombies.forEach(targetZ => {
-                                const d = Math.hypot(b.x - targetZ.x, b.y - targetZ.y);
-                                if (d < b.explosive) {
-                                    const dmg = d > 50 ? b.damage / 2 : b.damage;
-                                    targetZ.hp -= dmg;
-                                }
+                            zombies.forEach(tz => {
+                                const d = Math.hypot(b.x - tz.x, b.y - tz.y);
+                                if (d < b.explosive) tz.hp -= (d > 50 ? b.damage/2 : b.damage);
                             });
-                            // 시각적 폭발 효과
-                            const esx = b.x - game.cameraX;
-                            ctx.fillStyle = 'rgba(255, 165, 0, 0.5)'; ctx.beginPath(); ctx.arc(esx, b.y, b.explosive, 0, Math.PI*2); ctx.fill();
                             hit = true;
                         } else {
-                            z.hp -= b.damage;
-                            hit = true;
+                            z.hp -= b.damage; hit = true;
                         }
-
                         if (z.hp <= 0 && !z.charmed) {
                             zombies.splice(j, 1);
                             if (b.isTeam) { game.teamKills++; updateInventoryUI(); updateAmmoUI(); }
@@ -510,16 +467,14 @@
                         if (hit) { bullets.splice(i, 1); break; }
                     }
                 }
-                if (!hit && (b.life <= 0 || Math.abs(b.x - player.x) > 2500)) bullets.splice(i, 1);
+                if (!hit && (b.life <= 0 || Math.abs(b.x - player.x) > 2000)) bullets.splice(i, 1);
             }
 
-            // 플레이어 그리기
             const spx = player.x - game.cameraX;
             ctx.save(); ctx.translate(spx, player.y);
             ctx.rotate(Math.atan2(game.mouse.y - player.y, game.mouse.x - spx));
             ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.fillStyle = '#333'; ctx.fillRect(12, -4, 25, 8); ctx.restore();
+            ctx.fillStyle = '#333'; ctx.fillRect(15, -5, 25, 10); ctx.restore();
 
             if (player.hp <= 0) { game.isGameOver = true; document.getElementById('death-screen').classList.remove('hidden'); }
             hpBarFill.style.width = `${(player.hp / player.maxHp) * 100}%`;
@@ -534,6 +489,7 @@
         window.addEventListener('mousedown', () => game.isMouseDown = true);
         window.addEventListener('mouseup', () => game.isMouseDown = false);
 
+        for(let i=0; i<3; i++) survivors.push(new SurvivorAI(player.x - 60, player.y));
         initInventoryUI();
         spawnZombies();
         animate();
