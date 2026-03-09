@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survival: Safe Zone Defense</title>
+    <title>Survival: Allied Force</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #444; font-family: 'Courier New', monospace; }
@@ -31,7 +31,7 @@
         <div id="horde-timer">HORDE: 30s</div>
         <div class="flex justify-between items-start">
             <div>
-                <h1 class="text-3xl font-bold uppercase tracking-tighter text-green-500">SAFE ZONE DEFENSE</h1>
+                <h1 class="text-3xl font-bold uppercase tracking-tighter text-green-500">ALLIED FORCE</h1>
                 <p id="team-kills" class="text-xl text-yellow-400 font-bold">Team Kills: 0</p>
                 <div class="flex mt-2" id="weapon-inventory"></div>
             </div>
@@ -69,7 +69,8 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        // 플레이어 무기 설정
+        const ZOMBIE_ATTACK_COOLDOWN = 600;
+
         const PLAYER_WEAPONS = [
             { id: 1, name: "권총", fireRate: 350, damage: 14, bulletSpeed: 16, color: '#fff', range: 500, unlockKills: 0, auto: false },
             { id: 2, name: "기관단총", fireRate: 150, damage: 12, bulletSpeed: 18, color: '#3498db', range: 450, unlockKills: 100, auto: true },
@@ -92,8 +93,8 @@
             hordeActive: false,
             hordeTimeLeft: 0,
             safeZones: [
-                { x: 5000, w: 1200, activated: false },
-                { x: 15000, w: 1200, activated: false },
+                { x: 5000, w: 1500, activated: false },
+                { x: 15000, w: 1500, activated: false },
                 { x: 30000, w: 1500, activated: false }
             ]
         };
@@ -106,8 +107,8 @@
         const survivors = [];
         const militaryGuards = [];
         const bullets = [];
-        const zombies = [];
-        const charmedZombies = [];
+        const zombies = []; // 적 좀비만 포함
+        const alliedZombies = []; // 매혹된 아군 좀비만 포함
 
         function initInventoryUI() {
             weaponInventory.innerHTML = '';
@@ -161,7 +162,8 @@
                 this.offset = { x: (Math.random()-0.5)*200, y: (Math.random()-0.5)*200 };
             }
             update() {
-                const target = this.findNearest();
+                // 타겟팅 로직: 적 좀비만 공격 (alliedZombies는 공격하지 않음)
+                const target = this.findNearestEnemy();
                 if (target && Math.hypot(target.x-this.x, target.y-this.y) < this.weapon.range) {
                     this.shoot(target);
                 }
@@ -174,7 +176,7 @@
                     this.y += Math.sin(angle) * this.speed;
                 }
             }
-            findNearest() {
+            findNearestEnemy() {
                 let minD = Infinity, found = null;
                 for(let z of zombies) {
                     const d = Math.hypot(z.x - this.x, z.y - this.y);
@@ -232,12 +234,13 @@
             }
             update() {
                 if (this.charmed) {
+                    // 아군 좀비 AI: 적 좀비 추적
                     let enemy = null, minD = Infinity;
                     for(let z of zombies) {
                         const d = Math.hypot(z.x - this.x, z.y - this.y);
                         if (d < minD) { minD = d; enemy = z; }
                     }
-                    if (enemy && minD < 500) {
+                    if (enemy && minD < 600) {
                         const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
                         this.x += Math.cos(angle) * (this.speed * 1.3);
                         this.y += Math.sin(angle) * (this.speed * 1.3);
@@ -245,18 +248,21 @@
                             enemy.hp -= this.atk; enemy.lastDamageTime = Date.now();
                         }
                     } else {
-                        const angle = Date.now() * 0.001 + (charmedZombies.indexOf(this) * 0.7);
-                        const tx = player.x + Math.cos(angle) * 130;
-                        const ty = player.y + Math.sin(angle) * 130;
+                        // 적이 없을 때 플레이어 호위 (플레이어 뒤를 따름)
+                        const angle = Date.now() * 0.001 + (alliedZombies.indexOf(this) * 0.7);
+                        const tx = player.x + Math.cos(angle) * 140;
+                        const ty = player.y + Math.sin(angle) * 140;
                         const d = Math.hypot(tx - this.x, ty - this.y);
-                        if (d > 20) {
+                        if (d > 25) {
                             const a = Math.atan2(ty - this.y, tx - this.x);
                             this.x += Math.cos(a) * this.speed; this.y += Math.sin(a) * this.speed;
                         }
                     }
                     return;
                 }
-                let targets = [player, ...survivors, ...militaryGuards, ...charmedZombies];
+                
+                // 적 좀비 AI: 플레이어, 생존자, 군인, 아군좀비 공격
+                let targets = [player, ...survivors, ...militaryGuards, ...alliedZombies];
                 let minD = Infinity, target = player;
                 for(let t of targets) {
                     const d = Math.hypot(t.x - this.x, t.y - this.y);
@@ -274,13 +280,12 @@
                 if (super.draw()) {
                     const sx = this.x - game.cameraX;
                     ctx.fillStyle = '#000'; ctx.fillRect(sx - 15, this.y - 25, 30, 4);
+                    // 아군 좀비는 노란색(Normal) 또는 주황색(Bruiser)으로 표시
                     ctx.fillStyle = this.charmed ? (this.type === 'NORMAL' ? '#ffeb3b' : '#ff9800') : '#f00';
                     ctx.fillRect(sx - 15, this.y - 25, 30 * (this.hp / this.maxHp), 4);
                 }
             }
         }
-
-        const ZOMBIE_ATTACK_COOLDOWN = 600;
 
         function handleInput() {
             if (game.isGameOver) return;
@@ -349,7 +354,6 @@
         function spawnZombies() {
             if (zombies.length < (game.hordeActive ? 150 : 80)) {
                 if (game.hordeActive) {
-                    // 호드 시 사방에서 스폰
                     const angle = Math.random() * Math.PI * 2;
                     const x = player.x + Math.cos(angle) * 1000;
                     const y = player.y + Math.sin(angle) * 1000;
@@ -375,7 +379,7 @@
             game.hordeActive = true;
             game.hordeTimeLeft = 30;
             hordeTimerUI.style.opacity = "1";
-            statusMsg.textContent = "안전지대 방어전 시작! 건물을 지키십시오!";
+            statusMsg.textContent = "방어전 시작! 건물을 지키십시오!";
             
             const timer = setInterval(() => {
                 game.hordeTimeLeft--;
@@ -385,7 +389,6 @@
                     game.hordeActive = false;
                     hordeTimerUI.style.opacity = "0";
                     statusMsg.textContent = "방어 성공! 다음 지역으로 이동하십시오.";
-                    // 보상으로 킬수 대폭 증가
                     game.teamKills += 100;
                     updateInventoryUI();
                 }
@@ -396,59 +399,61 @@
             ctx.fillStyle = '#444'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             game.cameraX = player.x - canvas.width / 4;
 
-            // 바닥 격자 (이동감 제공)
             ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
             for(let x = -game.cameraX % 100; x < canvas.width; x += 100) {
                 ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
             }
 
-            // 안전지대 및 건물 그리기
             game.safeZones.forEach(zone => {
                 const sx = zone.x - game.cameraX;
-                // 연두색 바닥
                 ctx.fillStyle = 'rgba(46, 204, 113, 0.2)';
                 ctx.fillRect(sx, 0, zone.w, canvas.height);
                 ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 5;
                 ctx.strokeRect(sx, 0, zone.w, canvas.height);
-
-                // 건물 (벙커)
                 ctx.fillStyle = '#222';
                 ctx.fillRect(sx + zone.w/2 - 150, canvas.height/2 - 200, 300, 400);
                 ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 3;
                 ctx.strokeRect(sx + zone.w/2 - 150, canvas.height/2 - 200, 300, 400);
-                ctx.fillStyle = '#111';
-                ctx.fillRect(sx + zone.w/2 - 50, canvas.height/2 + 100, 100, 100); // 문
             });
 
             handleInput();
             handleShooting();
             checkSafeZones();
 
+            militaryGuards.forEach(g => { g.update(); g.draw(); });
             survivors.forEach(s => { s.update(); s.draw(); });
-            charmedZombies.forEach((cz, idx) => {
-                cz.update();
-                if (!cz.draw() || cz.hp <= 0) charmedZombies.splice(idx, 1);
-            });
 
+            // 아군 좀비 업데이트 및 그리기
+            for (let i = alliedZombies.length - 1; i >= 0; i--) {
+                const az = alliedZombies[i];
+                az.update();
+                if (!az.draw() || az.hp <= 0) alliedZombies.splice(i, 1);
+            }
+
+            // 적 좀비 업데이트 및 그리기
             for (let i = zombies.length - 1; i >= 0; i--) {
                 const z = zombies[i];
                 z.update();
                 if (!z.draw() && Math.abs(z.x - player.x) > 3000) zombies.splice(i, 1);
             }
 
+            // 탄환 처리
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const b = bullets[i];
                 b.update(); b.draw();
                 let hit = false;
+
+                // 탄환이 적 좀비를 맞췄을 때
                 for (let j = zombies.length - 1; j >= 0; j--) {
                     const z = zombies[j];
                     if (Math.hypot(b.x - z.x, b.y - z.y) < z.radius + 8) {
                         if (b.charm) {
+                            // 매혹 효과: 탄환에 맞아도 사라지지 않고 아군 배열로 이동
                             z.charmed = true;
                             z.hp = z.type === 'NORMAL' ? 100 : 200;
                             z.maxHp = z.hp;
                             z.atk = z.type === 'NORMAL' ? 1 : 2;
-                            charmedZombies.push(z);
+                            alliedZombies.push(z);
                             zombies.splice(j, 1);
                             hit = true;
                         } else if (b.explosive) {
@@ -460,6 +465,7 @@
                         } else {
                             z.hp -= b.damage; hit = true;
                         }
+                        
                         if (z.hp <= 0 && !z.charmed) {
                             zombies.splice(j, 1);
                             if (b.isTeam) { game.teamKills++; updateInventoryUI(); updateAmmoUI(); }
@@ -467,6 +473,17 @@
                         if (hit) { bullets.splice(i, 1); break; }
                     }
                 }
+                
+                // 탄환이 아군 좀비를 맞췄을 때 (아군 좀비는 관통하거나 타격 무시)
+                if (!hit) {
+                    for (let az of alliedZombies) {
+                        if (Math.hypot(b.x - az.x, b.y - az.y) < az.radius + 5) {
+                            // 플레이어 팀의 총알은 아군 좀비를 해치지 않음
+                            if (b.isTeam && !b.charm) hit = true; 
+                        }
+                    }
+                }
+
                 if (!hit && (b.life <= 0 || Math.abs(b.x - player.x) > 2000)) bullets.splice(i, 1);
             }
 
