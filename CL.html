@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash Arena - Custom Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans+KR:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #1a202c;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-viewport {
+            width: 100vw;
+            height: 100vh;
+            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+            background: #1a202c;
+            scrollbar-width: none;
+        }
+        #game-viewport::-webkit-scrollbar { display: none; }
+
+        #game-container { position: relative; }
+
+        canvas {
+            background: #4caf50;
+            border: 8px solid #5d4037;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: block;
+        }
+
+        .ui-panel { font-family: 'Bungee', cursive; }
+
+        .card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            min-width: 80px;
+        }
+
+        .card:hover { transform: translateY(-5px) scale(1.05); }
+        .card.disabled { filter: grayscale(1) brightness(0.5); cursor: not-allowed; }
+        .card.selected { border-color: #fbbf24; box-shadow: 0 0 15px #fbbf24; transform: translateY(-8px); }
+
+        .hotkey-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .elixir-bar-inner { transition: width 0.1s linear; }
+
+        .damage-popup {
+            position: absolute;
+            color: white;
+            font-weight: bold;
+            text-shadow: 2px 2px black;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            z-index: 100;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-40px); opacity: 0; }
+        }
+
+        #overlay { display: none; background: rgba(0,0,0,0.8); }
+        .fixed-ui { position: fixed; pointer-events: none; z-index: 50; }
+        .interactive { pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+<div id="game-viewport">
+    <div id="game-container">
+        <canvas id="arenaCanvas"></canvas>
+    </div>
+</div>
+
+<div class="fixed-ui top-4 left-0 w-full flex justify-between px-8 ui-panel">
+    <div class="text-white text-xl bg-blue-600 px-4 py-1 rounded-lg border-2 border-white shadow-lg interactive">
+        PLAYER: <span id="p-score">3</span>
+    </div>
+    <div class="text-white text-xl bg-red-600 px-4 py-1 rounded-lg border-2 border-white shadow-lg interactive">
+        ENEMY: <span id="e-score">3</span>
+    </div>
+</div>
+
+<div class="fixed-ui bottom-4 left-1/2 -translate-x-1/2 w-full max-w-6xl px-4 interactive">
+    <div class="bg-gray-800 p-4 rounded-2xl border-4 border-gray-700 shadow-2xl">
+        <div class="relative w-full h-8 bg-gray-900 rounded-full mb-4 overflow-hidden border-2 border-purple-400">
+            <div id="elixir-fill" class="elixir-bar-inner h-full bg-gradient-to-r from-purple-500 to-pink-500 w-0"></div>
+            <div class="absolute inset-0 flex items-center justify-center text-white font-bold">
+                ELIXIR: <span id="elixir-count">0</span> / 100
+            </div>
+        </div>
+        <div class="flex justify-center flex-wrap gap-2" id="card-hand"></div>
+    </div>
+</div>
+
+<div id="overlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center text-center">
+    <h1 id="result-text" class="text-6xl text-white mb-8 ui-panel">VICTORY!</h1>
+    <button onclick="location.reload()" class="bg-yellow-500 hover:bg-yellow-400 text-white font-bold py-4 px-8 rounded-full text-2xl shadow-xl transform active:scale-95 transition">REMATCH</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('arenaCanvas');
+    const ctx = canvas.getContext('2d');
+    const viewport = document.getElementById('game-viewport');
+    const elixirFill = document.getElementById('elixir-fill');
+    const elixirText = document.getElementById('elixir-count');
+    const cardHand = document.getElementById('card-hand');
+    const overlay = document.getElementById('overlay');
+    const resultText = document.getElementById('result-text');
+
+    canvas.width = 600;
+    canvas.height = 2100; 
+
+    const GRID_SIZE = 50;
+    const BRIDGE_Y = canvas.height / 2;
+    const MAX_ELIXIR = 20;
+    const ELIXIR_RATE = 0.08; // 코스트 상향에 따른 수급 속도 증가
+
+    let elixir = 20;
+    let selectedCard = null;
+    let units = [];
+    let projectiles = [];
+    let towers = [];
+    let gameOver = false;
+    let pScore = 3;
+    let eScore = 3;
+
+    const UNIT_TYPES = {
+        ZOMBIE: { name: '좀비', cost: 1, hp: 10, range: 40, damage: 100, speed: 1.2, icon: '🧟', count: 1, hotkey: '1', special: 'zombie' },
+        TRUCK: { name: '두돈반', cost: 4, hp: 7500, range: 300, damage: 0, speed: 2.2, icon: '🚛', count: 1, hotkey: '2', special: 'spawner_move' },
+        GOLEM_ARMY: { name: '골렘군단', cost: 8, hp: 20000, range: 50, damage: 400, speed: 0.7, icon: '🗿', count: 24, hotkey: '3', special: 'random_spawn' },
+        SUPER_KNIGHT: { name: '최강기사', cost: 10, hp: 1000000, range: 50, damage: 5000, speed: 1.8, icon: '⚔️', count: 1, hotkey: '4' },
+        PEKKA_HUT: { name: '페카오두막', cost: 6, hp: 150000, range: 0, damage: 0, speed: 0, icon: '🏠', count: 1, hotkey: '5', special: 'building_pekka' },
+        SNIPER: { name: '저격수', cost: 4, hp: 1, range: 100000, damage: 99999, speed: 1.0, icon: '🎯', count: 1, hotkey: '6', atkSpeed: 5000, targetPriority: 'unit' },
+        BAT_SWARM: { name: '동굴박쥐', cost: 6, hp: 6, range: 40, damage: 66, speed: 3.5, icon: '🦇', count: 666, hotkey: '7', air: true },
+        BOMBER: { name: '폭탄광', cost: 10, hp: 500, range: 150, damage: 65535, speed: 2.0, icon: '💣', count: 1, hotkey: '8', special: 'area_all' }
+    };
+
+    // 서브 유닛 정의
+    const SUB_UNITS = {
+        SOLDIER: { name: '군인', hp: 8000, range: 150, damage: 255, speed: 1.8, icon: '🔫', size: 12 },
+        PEKKA: { name: '페카', hp: 5000, range: 50, damage: 2000, speed: 1.2, icon: '🤖', size: 20 }
+    };
+
+    class Tower {
+        constructor(x, y, isEnemy, isKing = false) {
+            this.x = x; this.y = y; this.isEnemy = isEnemy; this.isKing = isKing;
+            this.maxHp = isKing ? 100000000 : 1000000;
+            this.hp = this.maxHp;
+            this.radius = isKing ? 45 : 30;
+            this.range = 450;
+            this.lastShot = 0;
+            this.alive = true;
+            this.damage = isKing ? 50000 : 9999;
+        }
+
+        draw() {
+            if (!this.alive) return;
+            ctx.save();
+            ctx.fillStyle = this.isEnemy ? '#991b1b' : '#1e40af';
+            ctx.beginPath();
+            ctx.roundRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+            if(this.isKing) {
+                ctx.font = '40px Arial'; ctx.textAlign = 'center';
+                ctx.fillText('👑', this.x, this.y + 15);
+            }
+            this.drawHpBar(); ctx.restore();
+        }
+
+        drawHpBar() {
+            const barWidth = 100; const barHeight = 10;
+            const px = this.x - barWidth/2; const py = this.y - this.radius - 30;
+            ctx.fillStyle = '#000'; ctx.fillRect(px, py, barWidth, barHeight);
+            ctx.fillStyle = this.isEnemy ? '#ef4444' : '#3b82f6';
+            ctx.fillRect(px, py, barWidth * (this.hp / this.maxHp), barHeight);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`${Math.ceil(this.hp)} / ${this.maxHp}`, this.x, py - 5);
+        }
+
+        update() {
+            if (!this.alive) return;
+            const target = this.findTarget();
+            if (target && Date.now() - this.lastShot > 1000) {
+                projectiles.push(new Projectile(this.x, this.y, target, this.damage, this.isEnemy));
+                this.lastShot = Date.now();
+            }
+        }
+
+        findTarget() {
+            let closest = null; let minDist = this.range;
+            units.forEach(u => {
+                if (u.isEnemy !== this.isEnemy && u.alive) {
+                    const d = Math.hypot(u.x - this.x, u.y - this.y);
+                    if (d < minDist) { minDist = d; closest = u; }
+                }
+            });
+            return closest;
+        }
+
+        takeDamage(amt, attackerIsZombie = false) {
+            // 좀비는 건물 타격시 변환 안함
+            this.hp -= amt;
+            createDamageText(this.x, this.y, amt);
+            if (this.hp <= 0 && this.alive) {
+                this.alive = false;
+                if (this.isEnemy) pScore--; else eScore--;
+                document.getElementById('p-score').textContent = pScore;
+                document.getElementById('e-score').textContent = eScore;
+                if (this.isKing) endGame(!this.isEnemy);
+            }
+        }
+    }
+
+    class Unit {
+        constructor(x, y, type, isEnemy, isSub = false) {
+            this.x = x; this.y = y; this.type = type; this.isEnemy = isEnemy;
+            this.hp = type.hp; this.maxHp = type.hp; this.alive = true;
+            this.target = null; this.lastAttack = 0;
+            this.lastSpawn = 0;
+            this.isStopped = false;
+            this.isBuilding = type.speed === 0;
+            this.size = type.size || (type.name.includes('거인') || type.name.includes('골렘') || type.name.includes('기사') ? 22 : 14);
+            if(type.name === '동굴박쥐') this.size = 8;
+        }
+
+        draw() {
+            if (!this.alive) return;
+            ctx.save();
+            if(this.type.air) ctx.globalAlpha = 0.8;
+            ctx.fillStyle = this.isEnemy ? '#ef4444' : '#3b82f6';
+            if(this.type.special === 'zombie') ctx.fillStyle = '#4d7c0f';
+
+            if(this.isBuilding) {
+                ctx.fillRect(this.x - this.size, this.y - this.size, this.size*2, this.size*2);
+            } else {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+            }
+            
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = `${this.size}px Arial`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(this.type.icon, this.x, this.y);
+            this.drawHpBar(); ctx.restore();
+        }
+
+        drawHpBar() {
+            if(this.type.name === '동굴박쥐') return; // 박쥐는 바 생략
+            ctx.fillStyle = '#000'; ctx.fillRect(this.x - 15, this.y - this.size - 8, 30, 3);
+            ctx.fillStyle = '#4ade80'; ctx.fillRect(this.x - 15, this.y - this.size - 8, 30 * (this.hp / this.maxHp), 3);
+        }
+
+        update() {
+            if (!this.alive) return;
+
+            // 소환 로직 (두돈반, 페카 오두막)
+            if (this.type.special === 'spawner_move' || this.type.special === 'building_pekka') {
+                const interval = 1000;
+                if (Date.now() - this.lastSpawn > interval) {
+                    if (this.type.special === 'building_pekka') {
+                        // 1초에 2기
+                        units.push(new Unit(this.x - 20, this.y + (this.isEnemy ? 30 : -30), SUB_UNITS.PEKKA, this.isEnemy, true));
+                        units.push(new Unit(this.x + 20, this.y + (this.isEnemy ? 30 : -30), SUB_UNITS.PEKKA, this.isEnemy, true));
+                    } else if (this.isStopped) {
+                        units.push(new Unit(this.x, this.y + (this.isEnemy ? 20 : -20), SUB_UNITS.SOLDIER, this.isEnemy, true));
+                    }
+                    this.lastSpawn = Date.now();
+                }
+            }
+
+            this.target = this.findTarget();
+            if (this.target) {
+                const dist = Math.hypot(this.target.x - this.x, this.target.y - this.y);
+                const stopDist = this.type.special === 'spawner_move' ? 250 : this.type.range + (this.target.radius || 15);
+
+                if (dist < stopDist) {
+                    this.isStopped = true;
+                    const atkSpeed = this.type.atkSpeed || 1000;
+                    if (Date.now() - this.lastAttack > atkSpeed && this.type.damage > 0) {
+                        if (this.type.special === 'area_all') {
+                            // 폭탄광: 주변 모든 유닛/건물 타격
+                            [...units, ...towers].forEach(obj => {
+                                if(obj.alive && Math.hypot(obj.x - this.x, obj.y - this.y) < 200) {
+                                    obj.takeDamage(this.type.damage);
+                                }
+                            });
+                        } else if (this.type.range > 100) {
+                            projectiles.push(new Projectile(this.x, this.y, this.target, this.type.damage, this.isEnemy, this.type.special === 'zombie'));
+                        } else {
+                            this.target.takeDamage(this.type.damage, this.type.special === 'zombie');
+                        }
+                        this.lastAttack = Date.now();
+                    }
+                } else if (!this.isBuilding) {
+                    this.isStopped = false;
+                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                    this.x += Math.cos(angle) * this.type.speed;
+                    this.y += Math.sin(angle) * this.type.speed;
+                }
+            }
+        }
+
+        findTarget() {
+            let bestTarget = null; let minDist = Infinity;
+            
+            // 저격수 우선순위: 유닛
+            if(this.type.targetPriority === 'unit') {
+                units.forEach(u => {
+                    if (u.isEnemy !== this.isEnemy && u.alive && !u.isBuilding) {
+                        const d = Math.hypot(u.x - this.x, u.y - this.y);
+                        if (d < minDist) { minDist = d; bestTarget = u; }
+                    }
+                });
+                if(bestTarget) return bestTarget;
+            }
+
+            units.forEach(u => {
+                if (u.isEnemy !== this.isEnemy && u.alive) {
+                    const d = Math.hypot(u.x - this.x, u.y - this.y);
+                    if (d < minDist) { minDist = d; bestTarget = u; }
+                }
+            });
+            if (!bestTarget || minDist > this.type.range + 500) {
+                towers.forEach(t => {
+                    if (t.isEnemy !== this.isEnemy && t.alive) {
+                        const d = Math.hypot(t.x - this.x, t.y - this.y);
+                        if (d < minDist) { minDist = d; bestTarget = t; }
+                    }
+                });
+            }
+            return bestTarget;
+        }
+
+        takeDamage(amt, attackerIsZombie = false) {
+            // 좀비 메커니즘: 모든 피해 1
+            const actualDamage = this.type.special === 'zombie' ? 1 : amt;
+            this.hp -= actualDamage;
+            createDamageText(this.x, this.y, actualDamage);
+
+            if (this.hp <= 0 && this.alive) {
+                this.alive = false;
+                // 좀비에게 죽으면 좀비로 변환
+                if (attackerIsZombie) {
+                    spawnUnit(this.x, this.y, 'ZOMBIE', !this.isEnemy);
+                }
+            }
+        }
+    }
+
+    class Projectile {
+        constructor(x, y, target, damage, isEnemy, isZombie = false) {
+            this.x = x; this.y = y; this.target = target; this.damage = damage;
+            this.isEnemy = isEnemy; this.speed = 12; this.alive = true; this.isZombie = isZombie;
+        }
+        update() {
+            if (!this.target.alive) { this.alive = false; return; }
+            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+            this.x += Math.cos(angle) * this.speed;
+            this.y += Math.sin(angle) * this.speed;
+            if (Math.hypot(this.target.x - this.x, this.target.y - this.y) < 20) {
+                this.target.takeDamage(this.damage, this.isZombie);
+                this.alive = false;
+            }
+        }
+        draw() {
+            ctx.fillStyle = this.isEnemy ? '#ef4444' : '#3b82f6';
+            ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    function createDamageText(x, y, amt) {
+        const div = document.createElement('div');
+        div.className = 'damage-popup';
+        div.textContent = `-${Math.round(amt)}`;
+        document.getElementById('game-container').appendChild(div);
+        div.style.left = x + 'px'; div.style.top = y + 'px';
+        setTimeout(() => div.remove(), 800);
+    }
+
+    function spawnUnit(x, y, typeKey, isEnemy) {
+        const type = UNIT_TYPES[typeKey];
+        if(!type) return;
+
+        if (type.special === 'random_spawn') {
+            // 골렘 군단: 아군 진영 랜덤 소환
+            for (let i = 0; i < type.count; i++) {
+                const rx = Math.random() * (canvas.width - 100) + 50;
+                const ry = isEnemy ? (Math.random() * 400 + 100) : (canvas.height - (Math.random() * 400 + 100));
+                units.push(new Unit(rx, ry, type, isEnemy));
+            }
+        } else {
+            for (let i = 0; i < type.count; i++) {
+                const offsetX = (Math.random() - 0.5) * (type.count > 10 ? 200 : 60);
+                const offsetY = (Math.random() - 0.5) * (type.count > 10 ? 200 : 60);
+                units.push(new Unit(x + offsetX, y + offsetY, type, isEnemy));
+            }
+        }
+    }
+
+    function handleCardSelection(key) {
+        const type = UNIT_TYPES[key];
+        if (elixir >= type.cost) {
+            selectedCard = key;
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+            document.getElementById(`card-${key}`).classList.add('selected');
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        const keyMap = {
+            '1': 'ZOMBIE', '2': 'TRUCK', '3': 'GOLEM_ARMY', '4': 'SUPER_KNIGHT',
+            '5': 'PEKKA_HUT', '6': 'SNIPER', '7': 'BAT_SWARM', '8': 'BOMBER'
+        };
+        if (keyMap[e.key]) handleCardSelection(keyMap[e.key]);
+    });
+
+    function init() {
+        towers.push(new Tower(canvas.width / 2, canvas.height - 100, false, true));
+        towers.push(new Tower(150, canvas.height - 500, false));
+        towers.push(new Tower(canvas.width - 150, canvas.height - 500, false));
+
+        towers.push(new Tower(canvas.width / 2, 100, true, true));
+        towers.push(new Tower(150, 500, true));
+        towers.push(new Tower(canvas.width - 150, 500, true));
+
+        viewport.scrollTop = canvas.height;
+
+        Object.keys(UNIT_TYPES).forEach(key => {
+            const type = UNIT_TYPES[key];
+            const card = document.createElement('div');
+            card.className = 'card bg-white p-2 rounded-xl flex flex-col items-center border-2 border-gray-400 interactive';
+            card.id = `card-${key}`;
+            card.innerHTML = `
+                <div class="hotkey-badge">${type.hotkey}</div>
+                <div class="text-3xl">${type.icon}</div>
+                <div class="text-[11px] font-bold text-gray-800">${type.name}</div>
+                <div class="bg-purple-600 text-white rounded-full px-2 text-xs font-bold mt-1">${type.cost}</div>
+            `;
+            card.onclick = (e) => { e.stopPropagation(); handleCardSelection(key); };
+            cardHand.appendChild(card);
+        });
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    let lastEnemySpawn = 0;
+    function enemyAI() {
+        if (Date.now() - lastEnemySpawn > 4000) {
+            const keys = Object.keys(UNIT_TYPES);
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+            spawnUnit(canvas.width/2, 200, randomKey, true);
+            lastEnemySpawn = Date.now();
+        }
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!selectedCard || gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+        if (y > BRIDGE_Y) {
+            const type = UNIT_TYPES[selectedCard];
+            if (elixir >= type.cost) {
+                spawnUnit(x, y, selectedCard, false);
+                elixir -= type.cost;
+                selectedCard = null;
+                document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+            }
+        }
+    });
+
+    function endGame(playerWon) {
+        gameOver = true;
+        overlay.style.display = 'flex';
+        resultText.textContent = playerWon ? "VICTORY!" : "DEFEAT...";
+        resultText.className = playerWon ? "text-6xl text-blue-400 ui-panel" : "text-6xl text-red-500 ui-panel";
+    }
+
+    function gameLoop() {
+        if (gameOver) return;
+        elixir = Math.min(MAX_ELIXIR, elixir + ELIXIR_RATE);
+        elixirFill.style.width = (elixir / MAX_ELIXIR * 100) + '%';
+        elixirText.textContent = Math.floor(elixir);
+
+        Object.keys(UNIT_TYPES).forEach(key => {
+            const card = document.getElementById(`card-${key}`);
+            if (elixir < UNIT_TYPES[key].cost) card.classList.add('disabled');
+            else card.classList.remove('disabled');
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#43a047';
+        for(let i=0; i<canvas.width; i+=GRID_SIZE) {
+            for(let j=0; j<canvas.height; j+=GRID_SIZE) {
+                if((i+j)/GRID_SIZE % 2 === 0) ctx.fillRect(i,j, GRID_SIZE, GRID_SIZE);
+            }
+        }
+        ctx.fillStyle = '#0288d1'; ctx.fillRect(0, BRIDGE_Y - 40, canvas.width, 80);
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(100, BRIDGE_Y - 50, 100, 100);
+        ctx.fillRect(canvas.width - 200, BRIDGE_Y - 50, 100, 100);
+
+        enemyAI();
+        towers.forEach(t => { t.update(); t.draw(); });
+        units = units.filter(u => u.alive);
+        units.forEach(u => { u.update(); u.draw(); });
+        projectiles = projectiles.filter(p => p.alive);
+        projectiles.forEach(p => { p.update(); p.draw(); });
+        requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
